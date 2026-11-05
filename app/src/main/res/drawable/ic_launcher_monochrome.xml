@@ -1,0 +1,42 @@
+<?xml version="1.0" encoding="utf-8"?>
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp"
+    android:height="108dp"
+    android:viewportWidth="108"
+    android:viewportHeight="108">
+
+    <!-- 左侧课表封套轮廓 -->
+    <path
+        android:fillColor="#00000000"
+        android:pathData="M30.5,24L49.5,24A9.5,9.5 0 0,1 59,33.5L59,72.5A9.5,9.5 0 0,1 49.5,82L30.5,82A9.5,9.5 0 0,1 21,72.5L21,33.5A9.5,9.5 0 0,1 30.5,24Z"
+        android:strokeWidth="2.8"
+        android:strokeColor="#FFFFFFFF" />
+
+    <!-- 课表三列音轨 -->
+    <path
+        android:fillColor="#FFFFFFFF"
+        android:pathData="M28.8,39.5L32.4,39.5A2.5,2.5 0 0,1 35,42L35,57.5A2.5,2.5 0 0,1 32.4,60L28.8,60A2.5,2.5 0 0,1 26.2,57.5L26.2,42A2.5,2.5 0 0,1 28.8,39.5Z" />
+    <path
+        android:fillColor="#FFFFFFFF"
+        android:pathData="M38.2,39.5L41.8,39.5A2.5,2.5 0 0,1 44.4,42L44.4,73A2.5,2.5 0 0,1 41.8,75.5L38.2,75.5A2.5,2.5 0 0,1 35.6,73L35.6,42A2.5,2.5 0 0,1 38.2,39.5Z" />
+    <path
+        android:fillColor="#FFFFFFFF"
+        android:pathData="M47.6,52.5L51.2,52.5A2.5,2.5 0 0,1 53.8,55L53.8,73A2.5,2.5 0 0,1 51.2,75.5L47.6,75.5A2.5,2.5 0 0,1 45,73L45,55A2.5,2.5 0 0,1 47.6,52.5Z" />
+
+    <!-- 右侧黑胶唱片外弧与八分音符 -->
+    <path
+        android:fillColor="#00000000"
+        android:pathData="M59,29.5 A24.5,24.5 0 1,1 59,78.5"
+        android:strokeWidth="2.8"
+        android:strokeLineCap="round"
+        android:strokeColor="#FFFFFFFF" />
+    <path
+        android:fillColor="#00000000"
+        android:pathData="M72.2,60.2L72.2,42 C78.5,43.2 81.2,47.5 78.2,52.5"
+        android:strokeWidth="2.6"
+        android:strokeLineCap="round"
+        android:strokeColor="#FFFFFFFF" />
+    <path
+        android:fillColor="#FFFFFFFF"
+        android:pathData="M64.2,60.2a4.5,3.6 0 1,0 9.0,0a4.5,3.6 0 1,0 -9.0,0" />
+</vector>

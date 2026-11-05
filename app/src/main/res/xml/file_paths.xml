@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="utf-8"?>
+<paths>
+    <cache-path
+        name="shared_templates"
+        path="shared_templates/" />
+    <files-path
+        name="exported_files"
+        path="." />
+</paths>

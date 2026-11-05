@@ -1,0 +1,87 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:id="@+id/widget_root"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:background="@drawable/widget_bg_card"
+    android:orientation="vertical"
+    android:padding="14dp">
+
+    <!-- 顶部栏：主题标识 + 点击换词按钮 -->
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:gravity="center_vertical"
+        android:orientation="horizontal">
+
+        <TextView
+            android:id="@+id/widget_badge"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_weight="1"
+            android:ellipsize="end"
+            android:maxLines="1"
+            android:text="💿 ZTMY · NOW PLAYING"
+            android:textColor="#00F5A0"
+            android:textSize="11sp"
+            android:textStyle="bold" />
+
+        <TextView
+            android:id="@+id/widget_next_lyric_btn"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:paddingStart="8dp"
+            android:paddingEnd="4dp"
+            android:text="↻ 换词"
+            android:textColor="#A695C7"
+            android:textSize="11sp" />
+    </LinearLayout>
+
+    <!-- 中部：下一轨/当前课程标题与教室时间 -->
+    <TextView
+        android:id="@+id/widget_course_title"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="6dp"
+        android:ellipsize="end"
+        android:maxLines="1"
+        android:text="Track 01 · 数据结构与算法设计"
+        android:textColor="#F4EEFF"
+        android:textSize="15sp"
+        android:textStyle="bold" />
+
+    <TextView
+        android:id="@+id/widget_course_meta"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="2dp"
+        android:ellipsize="end"
+        android:maxLines="1"
+        android:text="📍 信息楼 A302  |  🕒 08:00-09:35 (01-02节)"
+        android:textColor="#A695C7"
+        android:textSize="12sp" />
+
+    <!-- 底部：日音双语歌词日签 -->
+    <TextView
+        android:id="@+id/widget_lyric_jp"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="8dp"
+        android:ellipsize="end"
+        android:maxLines="1"
+        android:text="「このまま奪って隠して忘れたい」— 秒針を噛む"
+        android:textColor="#EDE2FF"
+        android:textSize="11sp" />
+
+    <TextView
+        android:id="@+id/widget_lyric_cn"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="1dp"
+        android:ellipsize="end"
+        android:maxLines="1"
+        android:text="真想就这样夺走、藏起然后忘却。"
+        android:textColor="#A695C7"
+        android:textSize="10sp" />
+
+</LinearLayout>

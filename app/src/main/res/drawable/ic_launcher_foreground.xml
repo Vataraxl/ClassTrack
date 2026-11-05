@@ -1,0 +1,194 @@
+<?xml version="1.0" encoding="utf-8"?>
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:aapt="http://schemas.android.com/aapt"
+    android:width="108dp"
+    android:height="108dp"
+    android:viewportWidth="108"
+    android:viewportHeight="108">
+
+    <!-- ================= 1. 右侧半露的黑胶唱片 (Vinyl Record Disc, 中心 62,54, 半径 25) ================= -->
+    <!-- 黑胶唱片投影 -->
+    <path
+        android:fillColor="#55000000"
+        android:pathData="M63,56m-25,0a25,25 0 1,1 50,0a25,25 0 1,1 -50,0" />
+
+    <!-- 黑胶唱片主盘体 -->
+    <path android:pathData="M62,54m-25,0a25,25 0 1,1 50,0a25,25 0 1,1 -50,0">
+        <aapt:attr name="android:fillColor">
+            <gradient
+                android:startX="37"
+                android:startY="29"
+                android:endX="87"
+                android:endY="79"
+                android:type="linear">
+                <item android:offset="0.0" android:color="#1E2640" />
+                <item android:offset="0.5" android:color="#0E1324" />
+                <item android:offset="1.0" android:color="#080B16" />
+            </gradient>
+        </aapt:attr>
+    </path>
+
+    <!-- 黑胶唱片外圈霓虹高光描边 -->
+    <path
+        android:fillColor="#00000000"
+        android:pathData="M62,54m-24.5,0a24.5,24.5 0 1,1 49,0a24.5,24.5 0 1,1 -49,0"
+        android:strokeWidth="1.0"
+        android:strokeColor="#8038BDF8" />
+
+    <!-- 黑胶唱片声轨纹路 (天青与洋红双色弧形音轨) -->
+    <path
+        android:fillColor="#00000000"
+        android:pathData="M62,33.5 A20.5,20.5 0 0,1 82.5,54"
+        android:strokeWidth="0.9"
+        android:strokeLineCap="round"
+        android:strokeColor="#7538BDF8" />
+    <path
+        android:fillColor="#00000000"
+        android:pathData="M62,37.5 A16.5,16.5 0 0,1 78.5,54"
+        android:strokeWidth="0.9"
+        android:strokeLineCap="round"
+        android:strokeColor="#6538BDF8" />
+    <path
+        android:fillColor="#00000000"
+        android:pathData="M79.7,64.2 A20.5,20.5 0 0,1 54,72.8"
+        android:strokeWidth="0.9"
+        android:strokeLineCap="round"
+        android:strokeColor="#7500F5A0" />
+
+    <!-- 黑胶中心彩胶盘芯 (洋红 -> 天青渐变) -->
+    <path android:pathData="M62,54m-9.8,0a9.8,9.8 0 1,1 19.6,0a9.8,9.8 0 1,1 -19.6,0">
+        <aapt:attr name="android:fillColor">
+            <gradient
+                android:startX="52"
+                android:startY="44"
+                android:endX="72"
+                android:endY="64"
+                android:type="linear">
+                <item android:offset="0.0" android:color="#FF2A85" />
+                <item android:offset="1.0" android:color="#38BDF8" />
+            </gradient>
+        </aapt:attr>
+    </path>
+
+    <!-- 黑胶中心唱针圆孔 -->
+    <path
+        android:fillColor="#0A0C1A"
+        android:pathData="M62,54m-2.8,0a2.8,2.8 0 1,1 5.6,0a2.8,2.8 0 1,1 -5.6,0" />
+
+    <!-- ================= 2. 左侧交叠的液态玻璃专辑封套课表 (X=21..59, Y=24..82) ================= -->
+    <!-- 封套投影 -->
+    <path
+        android:fillColor="#66000000"
+        android:pathData="M31.5,25.5L51.5,25.5A9.5,9.5 0 0,1 61,35L61,74.5A9.5,9.5 0 0,1 51.5,84L31.5,84A9.5,9.5 0 0,1 22,74.5L22,35A9.5,9.5 0 0,1 31.5,25.5Z" />
+
+    <!-- 专辑封套课表底板 -->
+    <path android:pathData="M30.5,24L49.5,24A9.5,9.5 0 0,1 59,33.5L59,72.5A9.5,9.5 0 0,1 49.5,82L30.5,82A9.5,9.5 0 0,1 21,72.5L21,33.5A9.5,9.5 0 0,1 30.5,24Z">
+        <aapt:attr name="android:fillColor">
+            <gradient
+                android:startX="21"
+                android:startY="24"
+                android:endX="59"
+                android:endY="82"
+                android:type="linear">
+                <item android:offset="0.0" android:color="#EB172347" />
+                <item android:offset="1.0" android:color="#E00F172A" />
+            </gradient>
+        </aapt:attr>
+    </path>
+
+    <!-- 液态玻璃银白高光边框 -->
+    <path
+        android:fillColor="#00000000"
+        android:pathData="M30.5,24L49.5,24A9.5,9.5 0 0,1 59,33.5L59,72.5A9.5,9.5 0 0,1 49.5,82L30.5,82A9.5,9.5 0 0,1 21,72.5L21,33.5A9.5,9.5 0 0,1 30.5,24Z"
+        android:strokeWidth="1.2"
+        android:strokeColor="#99FFFFFF" />
+
+    <!-- 封套顶部：实况胶囊灵动岛 -->
+    <path
+        android:fillColor="#080C16"
+        android:pathData="M29,29.5L51,29.5A2.8,2.8 0 0,1 53.8,32.3L53.8,32.3A2.8,2.8 0 0,1 51,35.1L29,35.1A2.8,2.8 0 0,1 26.2,32.3L26.2,32.3A2.8,2.8 0 0,1 29,29.5Z" />
+    <path
+        android:fillColor="#00F5A0"
+        android:pathData="M29.5,32.3m-1.3,0a1.3,1.3 0 1,1 2.6,0a1.3,1.3 0 1,1 -2.6,0" />
+    <path
+        android:pathData="M33.5,32.3L49.5,32.3"
+        android:strokeWidth="1.5"
+        android:strokeLineCap="round"
+        android:strokeColor="#E2F1FF" />
+
+    <!-- 封套内部：三列音乐频谱式课程音轨块 (Course Equalizer Tracks) -->
+    <!-- 第一列：天青蓝双节课 + 底部暗格 -->
+    <path android:pathData="M28.8,39.5L32.4,39.5A2.6,2.6 0 0,1 35,42.1L35,57.4A2.6,2.6 0 0,1 32.4,60L28.8,60A2.6,2.6 0 0,1 26.2,57.4L26.2,42.1A2.6,2.6 0 0,1 28.8,39.5Z">
+        <aapt:attr name="android:fillColor">
+            <gradient
+                android:startX="26.2"
+                android:startY="39.5"
+                android:endX="35"
+                android:endY="60"
+                android:type="linear">
+                <item android:offset="0.0" android:color="#38BDF8" />
+                <item android:offset="1.0" android:color="#2563EB" />
+            </gradient>
+        </aapt:attr>
+    </path>
+    <path
+        android:fillColor="#5538BDF8"
+        android:pathData="M28.8,63L32.4,63A2.6,2.6 0 0,1 35,65.6L35,72.9A2.6,2.6 0 0,1 32.4,75.5L28.8,75.5A2.6,2.6 0 0,1 26.2,72.9L26.2,65.6A2.6,2.6 0 0,1 28.8,63Z" />
+
+    <!-- 第二列：薄荷绿三节加长课音轨 -->
+    <path android:pathData="M38.2,39.5L41.8,39.5A2.6,2.6 0 0,1 44.4,42.1L44.4,72.9A2.6,2.6 0 0,1 41.8,75.5L38.2,75.5A2.6,2.6 0 0,1 35.6,72.9L35.6,42.1A2.6,2.6 0 0,1 38.2,39.5Z">
+        <aapt:attr name="android:fillColor">
+            <gradient
+                android:startX="35.6"
+                android:startY="39.5"
+                android:endX="44.4"
+                android:endY="75.5"
+                android:type="linear">
+                <item android:offset="0.0" android:color="#00F5A0" />
+                <item android:offset="1.0" android:color="#10B981" />
+            </gradient>
+        </aapt:attr>
+    </path>
+
+    <!-- 第三列：顶部暗格 + 霓虹洋红双节课音轨 -->
+    <path
+        android:fillColor="#55FF2A85"
+        android:pathData="M47.6,39.5L51.2,39.5A2.6,2.6 0 0,1 53.8,42.1L53.8,46.9A2.6,2.6 0 0,1 51.2,49.5L47.6,49.5A2.6,2.6 0 0,1 45,46.9L45,42.1A2.6,2.6 0 0,1 47.6,39.5Z" />
+    <path android:pathData="M47.6,52.5L51.2,52.5A2.6,2.6 0 0,1 53.8,55.1L53.8,72.9A2.6,2.6 0 0,1 51.2,75.5L47.6,75.5A2.6,2.6 0 0,1 45,72.9L45,55.1A2.6,2.6 0 0,1 47.6,52.5Z">
+        <aapt:attr name="android:fillColor">
+            <gradient
+                android:startX="45"
+                android:startY="52.5"
+                android:endX="53.8"
+                android:endY="75.5"
+                android:type="linear">
+                <item android:offset="0.0" android:color="#FF2A85" />
+                <item android:offset="1.0" android:color="#FB923C" />
+            </gradient>
+        </aapt:attr>
+    </path>
+
+    <!-- ================= 3. 黑胶唱片上的发光八分音符 (♪) ================= -->
+    <!-- 音符符头光晕 -->
+    <path
+        android:fillColor="#4538BDF8"
+        android:pathData="M68.5,60.5m-6.5,0a6.5,6.5 0 1,1 13,0a6.5,6.5 0 1,1 -13,0" />
+    <!-- 音符符尾流光飘带 -->
+    <path
+        android:fillColor="#00000000"
+        android:pathData="M72.2,42 C78.5,43.2 81.2,47.5 78.2,52.5"
+        android:strokeWidth="2.8"
+        android:strokeLineCap="round"
+        android:strokeColor="#38BDF8" />
+    <!-- 音符符干 -->
+    <path
+        android:fillColor="#00000000"
+        android:pathData="M72.2,60.2L72.2,42"
+        android:strokeWidth="2.6"
+        android:strokeLineCap="round"
+        android:strokeColor="#FFFFFF" />
+    <!-- 音符饱满椭圆符头 -->
+    <path
+        android:fillColor="#FFFFFF"
+        android:pathData="M64.2,60.2a4.5,3.6 0 1,0 9.0,0a4.5,3.6 0 1,0 -9.0,0" />
+</vector>

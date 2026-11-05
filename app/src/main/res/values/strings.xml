@@ -1,0 +1,5 @@
+<resources>
+    <string name="app_name">课轨</string>
+    <string name="widget_name">课轨 · Now Playing</string>
+    <string name="widget_description">黑胶/磁带风下一轨课程与日音歌词签小组件</string>
+</resources>
