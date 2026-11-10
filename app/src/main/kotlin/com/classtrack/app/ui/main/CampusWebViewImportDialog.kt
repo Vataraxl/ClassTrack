@@ -138,7 +138,12 @@ fun CampusWebViewImportDialog(
         wv?.evaluateJavascript(CourseImporter.eduSystemExtractJs) { rawResult ->
             val jsonStr = unwrapEvaluateJsString(rawResult)
             val count = runCatching {
-                if (jsonStr.startsWith("[")) JSONArray(jsonStr).length() else 0
+                when {
+                    com.classtrack.app.data.TimetableCellParser.looksLikeCellPayload(jsonStr) ->
+                        com.classtrack.app.data.TimetableCellParser.parse(jsonStr).size
+                    jsonStr.startsWith("[") -> JSONArray(jsonStr).length()
+                    else -> 0
+                }
             }.getOrDefault(0)
             detectedCourseCount = count
         }
@@ -412,6 +417,9 @@ fun CampusWebViewImportDialog(
                                     webChromeClient = object : WebChromeClient() {
                                         override fun onProgressChanged(view: WebView?, newProgress: Int) {
                                             loadProgress = newProgress
+                                            if (newProgress == 100) {
+                                                probePageTimetable(view)
+                                            }
                                         }
 
                                         override fun onReceivedTitle(view: WebView?, title: String?) {
@@ -559,7 +567,12 @@ fun CampusWebViewImportDialog(
                                 wv.evaluateJavascript(CourseImporter.eduSystemExtractJs) { rawJson ->
                                     val unwrappedJson = unwrapEvaluateJsString(rawJson)
                                     val hasStructuredCourses = runCatching {
-                                        unwrappedJson.startsWith("[") && JSONArray(unwrappedJson).length() > 0
+                                        when {
+                                            com.classtrack.app.data.TimetableCellParser.looksLikeCellPayload(unwrappedJson) ->
+                                                com.classtrack.app.data.TimetableCellParser.parse(unwrappedJson).isNotEmpty()
+                                            unwrappedJson.startsWith("[") -> JSONArray(unwrappedJson).length() > 0
+                                            else -> false
+                                        }
                                     }.getOrDefault(false)
 
                                     if (hasStructuredCourses) {

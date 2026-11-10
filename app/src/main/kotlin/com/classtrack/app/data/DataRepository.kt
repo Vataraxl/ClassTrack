@@ -80,18 +80,36 @@ class DataRepository(context: Context) {
     val courses: StateFlow<List<CourseItem>> = _courses.asStateFlow()
 
     /**
-     * 启动时加载课程并自动修复因旧版周次正则误判遗留的跨度异常脏数据（如 02-12 节、08-12 节）
+     * 启动时加载课程并自动修复遗留脏数据：
+     * 1. 旧版周次正则误判遗留的跨度异常脏数据（如 02-12 节、08-12 节）；
+     * 2. 旧版强智 div.kbcontent id 末段 "-2" 误判导致全表所有课程都被挤在 03-04 节且同天多课互相覆盖的脏数据。
      */
     private fun loadAndHealCourses(): List<CourseItem> {
         val raw = dbHelper.getAllCourses()
         val hasCorruptedSpan = raw.any { (it.endSection - it.startSection + 1) >= 5 && it.endSection >= 10 }
-        return if (hasCorruptedSpan) {
-            val healed = CourseImporter.mergeAndSanitizeCourses(raw)
-            dbHelper.replaceAllCourses(healed)
-            dbHelper.getAllCourses()
+        val allStuckInSection3To4 = raw.size >= 4 &&
+            raw.all { it.startSection == 3 && it.endSection == 4 } &&
+            raw.groupBy { it.dayOfWeek }.any { (_, dayCourses) -> dayCourses.size >= 2 }
+
+        if (!hasCorruptedSpan && !allStuckInSection3To4) {
+            return raw
+        }
+
+        val slotStarts = intArrayOf(1, 3, 5, 7, 9, 11)
+        val unstacked = if (allStuckInSection3To4) {
+            raw.groupBy { it.dayOfWeek }.flatMap { (_, dayCourses) ->
+                dayCourses.sortedBy { it.id }.mapIndexed { idx, course ->
+                    val start = slotStarts.getOrElse(idx) { (idx * 2 + 1).coerceAtMost(11) }
+                    course.copy(startSection = start, endSection = start + 1)
+                }
+            }
         } else {
             raw
         }
+
+        val healed = CourseImporter.mergeAndSanitizeCourses(unstacked)
+        dbHelper.replaceAllCourses(healed)
+        return dbHelper.getAllCourses()
     }
 
     private val _timeSlots = MutableStateFlow(loadSavedTimeSlots(_maxSections.value))
