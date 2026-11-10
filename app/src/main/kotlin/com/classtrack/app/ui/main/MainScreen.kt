@@ -482,7 +482,7 @@ private fun ClassTrackMinimalTopBar(
             modifier = Modifier
                 .fillMaxWidth()
                 .statusBarsPadding()
-                .padding(horizontal = 16.dp, vertical = 10.dp),
+                .padding(horizontal = 12.dp, vertical = 9.dp),
             horizontalArrangement = Arrangement.SpaceBetween,
             verticalAlignment = Alignment.CenterVertically
         ) {
@@ -490,27 +490,29 @@ private fun ClassTrackMinimalTopBar(
             if (isWeeklyGridTab) {
                 Row(
                     verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(10.dp)
+                    horizontalArrangement = Arrangement.spacedBy(6.dp)
                 ) {
                     // 点击展开周次滑条的大标题
                     Row(
                         verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(4.dp),
+                        horizontalArrangement = Arrangement.spacedBy(3.dp),
                         modifier = Modifier
                             .clip(RoundedCornerShape(10.dp))
                             .clickable { onToggleWeekStrip() }
-                            .padding(vertical = 2.dp, horizontal = 4.dp)
+                            .padding(vertical = 2.dp, horizontal = 3.dp)
                     ) {
                         Text(
                             text = "第 $viewingWeek 周",
-                            fontSize = 20.sp,
+                            fontSize = 19.sp,
                             fontWeight = FontWeight.Bold,
-                            letterSpacing = (-0.4).sp,
+                            letterSpacing = (-0.5).sp,
+                            maxLines = 1,
+                            softWrap = false,
                             color = MaterialTheme.colorScheme.onBackground
                         )
                         Text(
                             text = if (showWeekStrip) "▴" else "▾",
-                            fontSize = 13.sp,
+                            fontSize = 12.sp,
                             color = visuals.mutedTextColor
                         )
                     }
@@ -536,13 +538,15 @@ private fun ClassTrackMinimalTopBar(
                                 modifier = Modifier
                                     .clip(CircleShape)
                                     .clickable { onPrevWeek() }
-                                    .padding(horizontal = 8.dp, vertical = 2.dp)
+                                    .padding(horizontal = 6.dp, vertical = 2.dp)
                             )
 
                             Text(
-                                text = if (isCurrentWeek) "本周" else "非本周 · 回本周",
+                                text = if (isCurrentWeek) "本周" else "回本周",
                                 fontSize = 11.sp,
                                 fontWeight = FontWeight.SemiBold,
+                                maxLines = 1,
+                                softWrap = false,
                                 color = if (isCurrentWeek) {
                                     MaterialTheme.colorScheme.primary
                                 } else {
@@ -553,7 +557,7 @@ private fun ClassTrackMinimalTopBar(
                                     .clickable {
                                         if (!isCurrentWeek) onReturnToCurrentWeek() else onToggleWeekStrip()
                                     }
-                                    .padding(horizontal = 6.dp, vertical = 2.dp)
+                                    .padding(horizontal = 4.dp, vertical = 2.dp)
                             )
 
                             Text(
@@ -564,7 +568,7 @@ private fun ClassTrackMinimalTopBar(
                                 modifier = Modifier
                                     .clip(CircleShape)
                                     .clickable { onNextWeek() }
-                                    .padding(horizontal = 8.dp, vertical = 2.dp)
+                                    .padding(horizontal = 6.dp, vertical = 2.dp)
                             )
                         }
                     }
@@ -585,6 +589,8 @@ private fun ClassTrackMinimalTopBar(
                         fontSize = 20.sp,
                         fontWeight = FontWeight.Bold,
                         letterSpacing = (-0.4).sp,
+                        maxLines = 1,
+                        softWrap = false,
                         color = MaterialTheme.colorScheme.onBackground
                     )
                     Surface(
@@ -595,6 +601,8 @@ private fun ClassTrackMinimalTopBar(
                             text = "课轨",
                             fontSize = 10.sp,
                             fontWeight = FontWeight.Bold,
+                            maxLines = 1,
+                            softWrap = false,
                             color = MaterialTheme.colorScheme.primary,
                             modifier = Modifier.padding(horizontal = 7.dp, vertical = 2.dp)
                         )
@@ -605,7 +613,7 @@ private fun ClassTrackMinimalTopBar(
             // 右侧操作区（极简主题切换胶囊 + 加课按钮）
             Row(
                 verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(8.dp)
+                horizontalArrangement = Arrangement.spacedBy(6.dp)
             ) {
                 val themeInteraction = remember { MutableInteractionSource() }
                 val isThemePressed by themeInteraction.collectIsPressedAsState()
@@ -632,24 +640,26 @@ private fun ClassTrackMinimalTopBar(
                 ) {
                     Row(
                         verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(6.dp),
-                        modifier = Modifier.padding(horizontal = 10.dp, vertical = 5.dp)
+                        horizontalArrangement = Arrangement.spacedBy(5.dp),
+                        modifier = Modifier.padding(horizontal = 8.dp, vertical = 5.dp)
                     ) {
                         VinylRecordDisc(
                             primaryColor = MaterialTheme.colorScheme.primary,
                             secondaryColor = MaterialTheme.colorScheme.secondary,
-                            size = 16.dp,
+                            size = 15.dp,
                             spinning = false
                         )
                         Text(
-                            text = themeDisplayName.take(6),
-                            fontSize = 11.5.sp,
+                            text = themeDisplayName.take(5),
+                            fontSize = 11.sp,
                             fontWeight = FontWeight.SemiBold,
+                            maxLines = 1,
+                            softWrap = false,
                             color = MaterialTheme.colorScheme.onSurface
                         )
                         Text(
                             text = "▾",
-                            fontSize = 10.sp,
+                            fontSize = 9.5.sp,
                             color = visuals.mutedTextColor
                         )
                     }
@@ -681,10 +691,12 @@ private fun ClassTrackMinimalTopBar(
                     ) {
                         Text(
                             text = "+ 加课",
-                            fontSize = 11.5.sp,
+                            fontSize = 11.sp,
                             fontWeight = FontWeight.Bold,
+                            maxLines = 1,
+                            softWrap = false,
                             color = MaterialTheme.colorScheme.onPrimary,
-                            modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp)
+                            modifier = Modifier.padding(horizontal = 10.dp, vertical = 5.dp)
                         )
                     }
                 }

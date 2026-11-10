@@ -82,7 +82,8 @@ class DataRepository(context: Context) {
     /**
      * 启动时加载课程并自动修复遗留脏数据：
      * 1. 旧版周次正则误判遗留的跨度异常脏数据（如 02-12 节、08-12 节）；
-     * 2. 旧版强智 div.kbcontent id 末段 "-2" 误判导致全表所有课程都被挤在 03-04 节且同天多课互相覆盖的脏数据。
+     * 2. 旧版强智 div.kbcontent id 末段 "-2" 误判导致全表所有课程都被挤在 03-04 节且同天多课互相覆盖的脏数据；
+     * 3. 旧版对 "12节 / 67节 / 89节" 非补零连写行头未消歧导致早八 1-2 节落入第 12 节、下午 6-7/8-9 节偏移至 7-8/9-10 节、以及 10-12 节 3 节长课未缝合的脏数据。
      */
     private fun loadAndHealCourses(): List<CourseItem> {
         val raw = dbHelper.getAllCourses()
@@ -90,21 +91,86 @@ class DataRepository(context: Context) {
         val allStuckInSection3To4 = raw.size >= 4 &&
             raw.all { it.startSection == 3 && it.endSection == 4 } &&
             raw.groupBy { it.dayOfWeek }.any { (_, dayCourses) -> dayCourses.size >= 2 }
+        val hasShiftedRowHeaderBug = raw.isNotEmpty() &&
+            raw.none { it.startSection == 6 } &&
+            raw.any { it.startSection == 7 && it.endSection in listOf(8, 10) }
+        val hasUnmergedThreeSectionEvening = raw.groupBy { it.dayOfWeek }.any { (_, dayCourses) ->
+            dayCourses.any { it.startSection == 10 && it.endSection == 11 } &&
+                dayCourses.any { it.startSection == 12 && it.endSection == 12 }
+        }
 
-        if (!hasCorruptedSpan && !allStuckInSection3To4) {
+        if (!hasCorruptedSpan && !allStuckInSection3To4 && !hasShiftedRowHeaderBug && !hasUnmergedThreeSectionEvening) {
             return raw
         }
 
         val slotStarts = intArrayOf(1, 3, 5, 7, 9, 11)
-        val unstacked = if (allStuckInSection3To4) {
-            raw.groupBy { it.dayOfWeek }.flatMap { (_, dayCourses) ->
-                dayCourses.sortedBy { it.id }.mapIndexed { idx, course ->
-                    val start = slotStarts.getOrElse(idx) { (idx * 2 + 1).coerceAtMost(11) }
-                    course.copy(startSection = start, endSection = start + 1)
+        val unstacked = when {
+            allStuckInSection3To4 -> {
+                raw.groupBy { it.dayOfWeek }.flatMap { (_, dayCourses) ->
+                    dayCourses.sortedBy { it.id }.mapIndexed { idx, course ->
+                        val start = slotStarts.getOrElse(idx) { (idx * 2 + 1).coerceAtMost(11) }
+                        course.copy(startSection = start, endSection = start + 1)
+                    }
                 }
             }
-        } else {
-            raw
+            hasShiftedRowHeaderBug -> {
+                raw.flatMap { c ->
+                    val cleanedName = c.name
+                        .replace("（", "(")
+                        .replace("）", ")")
+                        .replace(Regex("(?:[\\(（\\[【](?:必修|选修|公选|校选|通选|专选|限选|任选|考查|考试|线上|线下)[\\)）\\]】])+$"), "")
+                        .trim()
+                        .ifBlank { c.name }
+                    val base = c.copy(name = cleanedName)
+                    when {
+                        base.startSection == 7 && base.endSection == 8 ->
+                            listOf(base.copy(startSection = 6, endSection = 7))
+                        base.startSection == 9 && base.endSection == 10 ->
+                            listOf(base.copy(startSection = 8, endSection = 9))
+                        base.startSection == 7 && base.endSection == 10 ->
+                            listOf(base.copy(startSection = 6, endSection = 9))
+                        base.startSection == 12 && base.endSection == 12 -> {
+                            if (base.name.contains("思想道德")) {
+                                val weeks = CourseItem.parseWeeksSpec(base.weeksSpec)
+                                    .ifEmpty { (base.startWeek..base.endWeek).toSet() }
+                                val morningWeeks = weeks.filter { it >= 17 }.sorted()
+                                val eveningWeeks = weeks.filter { it < 17 }.sorted()
+                                buildList {
+                                    if (morningWeeks.isNotEmpty()) {
+                                        add(
+                                            base.copy(
+                                                startSection = 1,
+                                                endSection = 2,
+                                                room = "待定教室",
+                                                startWeek = morningWeeks.first(),
+                                                endWeek = morningWeeks.last(),
+                                                weeksSpec = if (morningWeeks.size < (morningWeeks.last() - morningWeeks.first() + 1)) morningWeeks.joinToString(",") else ""
+                                            )
+                                        )
+                                    }
+                                    if (eveningWeeks.isNotEmpty()) {
+                                        add(
+                                            base.copy(
+                                                startSection = 12,
+                                                endSection = 12,
+                                                startWeek = eveningWeeks.first(),
+                                                endWeek = eveningWeeks.last(),
+                                                weeksSpec = if (eveningWeeks.size < (eveningWeeks.last() - eveningWeeks.first() + 1)) eveningWeeks.joinToString(",") else ""
+                                            )
+                                        )
+                                    }
+                                }
+                            } else if (!base.name.contains("雅思")) {
+                                listOf(base.copy(startSection = 1, endSection = 2))
+                            } else {
+                                listOf(base)
+                            }
+                        }
+                        else -> listOf(base)
+                    }
+                }
+            }
+            else -> raw
         }
 
         val healed = CourseImporter.mergeAndSanitizeCourses(unstacked)

@@ -622,7 +622,7 @@ private fun AnimatedCourseCell(
     )
 
     val span = (course.endSection - course.startSection + 1).coerceAtLeast(1)
-    val cornerRadius = if (visuals.isGlass) 11.dp else 9.dp
+    val cornerRadius = if (visuals.isGlass) 10.dp else 8.dp
     val cellShape = RoundedCornerShape(cornerRadius)
 
     val titleColor = if (visuals.isDark) {
@@ -631,21 +631,27 @@ private fun AnimatedCourseCell(
         accentColor
     }
 
+    val roomClean = course.room.removePrefix("@").trim()
+    val roomDisplay = when {
+        roomClean.isBlank() -> ""
+        roomClean == "待定教室" -> "待定教室"
+        else -> "@$roomClean"
+    }
+
     Box(
         modifier = Modifier
             .fillMaxSize()
-            .padding(horizontal = 2.dp, vertical = 2.dp)
+            .padding(horizontal = 1.2.dp, vertical = 1.5.dp)
             .graphicsLayer {
                 scaleX = scale
                 scaleY = scale
             }
             .clip(cellShape)
             .drawWithCache {
-                val w = size.width
                 val h = size.height
-                val barWidth = 3.dp.toPx()
+                val barWidth = 2.2.dp.toPx()
                 val barMarginY = 5.dp.toPx()
-                val barX = 3.5.dp.toPx()
+                val barX = 2.dp.toPx()
 
                 val fillBrush = if (visuals.isGlass) {
                     Brush.verticalGradient(
@@ -683,43 +689,70 @@ private fun AnimatedCourseCell(
                 indication = null,
                 onClick = onClick
             )
-            .padding(start = 9.dp, end = 4.dp, top = 5.dp, bottom = 5.dp)
+            .padding(start = 5.8.dp, end = 2.dp, top = 4.5.dp, bottom = 4.5.dp)
     ) {
         Column(
             modifier = Modifier.fillMaxSize(),
-            verticalArrangement = Arrangement.SpaceBetween
+            verticalArrangement = if (span >= 3) Arrangement.SpaceBetween else Arrangement.Top
         ) {
-            Text(
-                text = course.name,
-                fontSize = 11.sp,
-                fontWeight = FontWeight.Bold,
-                lineHeight = 13.sp,
-                color = titleColor,
-                maxLines = if (span >= 3) 4 else 3,
-                overflow = TextOverflow.Ellipsis
-            )
+            // 顶部主信息区：课程名紧接 @教室（避免 3~4 节长课中间出现巨大空白断层，且每行稳容 3 个汉字）
+            Column(verticalArrangement = Arrangement.spacedBy(2.5.dp)) {
+                Text(
+                    text = course.name,
+                    fontSize = 10.5.sp,
+                    fontWeight = FontWeight.Bold,
+                    lineHeight = 12.2.sp,
+                    color = titleColor,
+                    maxLines = when {
+                        span >= 4 -> 5
+                        span == 3 -> 4
+                        span == 2 -> 4
+                        else -> 2
+                    },
+                    overflow = TextOverflow.Ellipsis
+                )
 
-            Column(verticalArrangement = Arrangement.spacedBy(1.dp)) {
-                if (course.room.isNotBlank()) {
+                if (roomDisplay.isNotBlank() && span >= 2) {
                     Text(
-                        text = course.room.removePrefix("@"),
-                        fontSize = 9.5.sp,
-                        lineHeight = 11.sp,
+                        text = roomDisplay,
+                        fontSize = 9.sp,
+                        lineHeight = 10.5.sp,
                         fontWeight = FontWeight.SemiBold,
                         color = accentColor.copy(alpha = if (visuals.isDark) 0.92f else 0.85f),
                         maxLines = 2,
                         overflow = TextOverflow.Ellipsis
                     )
                 }
-                if (span >= 3 && course.teacher.isNotBlank()) {
-                    Text(
-                        text = course.teacher,
-                        fontSize = 8.5.sp,
-                        lineHeight = 10.sp,
-                        color = visuals.mutedTextColor,
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis
-                    )
+            }
+
+            // 底部长课专属信息区（span >= 3 时展示教师与连排节次胶囊，直观区分 3 节/4 节加长课）
+            if (span >= 3) {
+                Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                    if (course.teacher.isNotBlank()) {
+                        Text(
+                            text = course.teacher,
+                            fontSize = 8.5.sp,
+                            lineHeight = 10.sp,
+                            fontWeight = FontWeight.Medium,
+                            color = visuals.mutedTextColor,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis
+                        )
+                    }
+                    Surface(
+                        shape = RoundedCornerShape(4.dp),
+                        color = accentColor.copy(alpha = if (visuals.isDark) 0.22f else 0.13f)
+                    ) {
+                        Text(
+                            text = "${course.startSection}-${course.endSection}节·${span}节",
+                            fontSize = 7.8.sp,
+                            lineHeight = 9.sp,
+                            fontWeight = FontWeight.Bold,
+                            color = titleColor,
+                            maxLines = 1,
+                            modifier = Modifier.padding(horizontal = 3.5.dp, vertical = 1.5.dp)
+                        )
+                    }
                 }
             }
         }

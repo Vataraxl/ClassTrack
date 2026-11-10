@@ -66,9 +66,49 @@ object TimetableCellParser {
     /** 解析 JS 输出的原始格子并合并为最终课程列表 */
     fun parse(raw: String): List<CourseItem> = parseCells(decodeCells(raw))
 
+    private val blockSeparatorLineRegex = Regex("^\\s*(?:-{2,}|={2,}|─{2,}|—{2,}|\\*{3,})\\s*$")
+
     fun parseCells(cells: List<RawTimetableCell>): List<CourseItem> {
-        val parsed = cells.mapNotNull { cell -> parseCell(cell) }
+        val parsed = cells
+            .flatMap { cell -> expandSubCells(cell) }
+            .mapNotNull { subCell -> parseCell(subCell) }
         return CourseImporter.mergeAndSanitizeCourses(parsed)
+    }
+
+    /**
+     * 将同一个格子内以 `--` / `----` / `====` 分隔的多门课程拆分为独立子格子，
+     * 防止第一门课吞并后续课程的周次/教室并导致同格第 2、3 门课丢失。
+     */
+    private fun expandSubCells(cell: RawTimetableCell): List<RawTimetableCell> {
+        val rawLines = cell.text.lines()
+        val blocks = mutableListOf<MutableList<String>>()
+        var current = mutableListOf<String>()
+        for (line in rawLines) {
+            if (blockSeparatorLineRegex.matches(line)) {
+                if (current.isNotEmpty()) {
+                    blocks.add(current)
+                    current = mutableListOf()
+                }
+            } else if (line.isNotBlank()) {
+                current.add(line)
+            }
+        }
+        if (current.isNotEmpty()) {
+            blocks.add(current)
+        }
+        if (blocks.size <= 1) return listOf(cell)
+
+        return blocks.map { blockLines ->
+            val blockText = blockLines.joinToString("\n")
+            val scopedFields = cell.fields.filter { f ->
+                val v = f.v.trim()
+                v.isNotEmpty() && blockLines.any { line -> line.contains(v) || v.contains(line.trim()) }
+            }
+            cell.copy(
+                text = blockText,
+                fields = scopedFields
+            )
+        }
     }
 
     // ---------------------------------------------------------------------
@@ -91,8 +131,8 @@ object TimetableCellParser {
     )
     private val leadingSymbolRegex = Regex("^[◆★☆●○■□▪▲△◇※#*\\s]+")
     private val trailingSymbolRegex = Regex("[◆★☆●○■□▪▲△◇※*\\s]+$")
-    private val redundantTrailingTagRegex = Regex("(?:[\\(（\\[](?:必修|选修|限选|任选|考查|考试)[\\)）\\]])+$")
-    private val roomLikeRegex = Regex("(?:楼|教|室|馆|场|区|中心|机房|实验|厅|院|[A-Za-z]\\d|\\d{3,})")
+    private val redundantTrailingTagRegex = Regex("(?:[\\(（\\[【](?:必修|选修|公选|校选|通选|专选|限选|任选|考查|考试|线上|线下)[\\)）\\]】])+$")
+    private val roomLikeRegex = Regex("(?:楼|教|室|馆|场|区|中心|机房|实验|厅|院|看台|[A-Za-z]\\d|\\d{3,})")
 
     fun parseCell(cell: RawTimetableCell): CourseItem? {
         val day = cell.day
@@ -100,7 +140,7 @@ object TimetableCellParser {
 
         val lines = cell.text.lines()
             .map { it.replace('\u00a0', ' ').replace(Regex("\\s+"), " ").trim() }
-            .filter { it.isNotEmpty() && !it.matches(Regex("[-=]{3,}")) }
+            .filter { it.isNotEmpty() && !it.matches(Regex("[-=_*\\s]+")) }
         if (lines.isEmpty()) return null
 
         val nameField = fieldValue(cell.fields, nameTitleKeys)
@@ -183,6 +223,8 @@ object TimetableCellParser {
         val base = raw
             .replace(leadingSymbolRegex, "")
             .replace(trailingSymbolRegex, "")
+            .replace("（", "(")
+            .replace("）", ")")
             .trim()
         val stripped = base.replace(redundantTrailingTagRegex, "").trim()
         return if (stripped.length >= 2) stripped else base
@@ -223,7 +265,7 @@ object TimetableCellParser {
         if (cell.rowStart in 1..18) {
             return cell.rowStart to cell.rowEnd.coerceIn(cell.rowStart, 18)
         }
-        parseRowHeader(cell.rowHeader)?.let { return it }
+        parseRowHeader(cell.rowHeader, cell.rowOrdinal)?.let { return it }
         if (cell.rowOrdinal >= 0) {
             val start = cell.rowOrdinal * 2 + 1
             if (start in 1..17) return start to start + 1
@@ -237,27 +279,32 @@ object TimetableCellParser {
     )
 
     /**
-     * 解析行头文本为节次范围：
+     * 解析行头文本为节次范围（深度兼容北京林业大学等强智教务 "12节 / 34节 / 5节 / 67节 / 89节 / 1011节 / 12节" 非补零连写格式）：
+     * - "12节" (rowOrdinal=0/1) → 1..2；"12节" (rowOrdinal>=4) → 12..12
+     * - "34节" / "67节" / "89节" → 3..4 / 6..7 / 8..9
+     * - "5节" → 5..5
+     * - "1011节" / "0102" / "010203" / "091011" / "910节" → 10..11 / 1..2 / 1..3 / 9..11 / 9..10
      * - "第一大节 (01,02小节) 08:00-09:35" → 1..2
      * - "第三大节\n05,06,07" → 5..7
      * - "第2大节" → 3..4
      * - "第一大节 第二大节" (rowSpan 跨行合并) → 1..4
-     * - "0102" / "010203" → 1..2 / 1..3
      * - "1-2节" / "第3节" / "第一节 第二节" / "3" → 1..2 / 3..3 / 1..2 / 3..3
-     * - "上午"、"中午"、"午休"、"备注" → null
+     * - "上午"、"中午"、"午休"、"备注"、"实验实习安排" → null
      */
-    fun parseRowHeader(raw: String): Pair<Int, Int>? {
+    fun parseRowHeader(raw: String, rowOrdinal: Int = -1): Pair<Int, Int>? {
         if (raw.isBlank()) return null
         // 去除时间（08:00、8：50）
         var s = raw.replace(Regex("\\d{1,2}\\s*[:：]\\s*\\d{2}"), " ")
-        if (s.contains("备注") || s.contains("说明") || s.contains("合计") || s.contains("午休")) return null
+        if (s.contains("备注") || s.contains("说明") || s.contains("合计") || s.contains("午休") || s.contains("安排")) {
+            return null
+        }
 
         // 1. 大节：优先用其后附带的小节编号，否则按「第 n 大节 = 2n-1、2n 节」换算（支持跨行合并的多个大节）
         val bigRegex = Regex("第?\\s*([0-9]{1,2}|十[一二]?|[一二三四五六七八九])\\s*大节")
         val bigMatches = bigRegex.findAll(s).toList()
         if (bigMatches.isNotEmpty()) {
             val rest = s.replace(bigRegex, " ")
-            numbersRange(rest)?.let { return it }
+            numbersRange(rest, rowOrdinal)?.let { return it }
             val bigNums = bigMatches.mapNotNull { m ->
                 val token = m.groupValues[1]
                 token.toIntOrNull() ?: chineseNumerals[token]
@@ -270,16 +317,7 @@ object TimetableCellParser {
             return null
         }
 
-        // 2. 紧凑写法 "0102"、"010203"
-        val compactMatches = Regex("(?<!\\d)((?:\\d{2}){2,6})(?!\\d)").findAll(s)
-            .flatMap { m -> m.value.chunked(2).mapNotNull { it.toIntOrNull() } }
-            .filter { it in 1..18 }
-            .toList()
-        if (compactMatches.size >= 2) {
-            return compactMatches.min() to compactMatches.max()
-        }
-
-        // 3. 中文单节 "第一节"、"第一节 第二节"
+        // 2. 中文单节 "第一节"、"第一节 第二节"
         val cnMatches = Regex("第\\s*(十[一二]?|[一二三四五六七八九])\\s*节").findAll(s)
             .mapNotNull { m -> chineseNumerals[m.groupValues[1]] }
             .filter { it in 1..18 }
@@ -289,18 +327,68 @@ object TimetableCellParser {
         }
 
         s = s.replace("小节", " ")
-        return numbersRange(s)
+        return numbersRange(s, rowOrdinal)
     }
 
-    private fun numbersRange(text: String): Pair<Int, Int>? {
-        val nums = Regex("\\d{1,2}").findAll(text)
-            .mapNotNull { it.value.toIntOrNull() }
+    /**
+     * 将行头中的数字 Token 解码为节次列表：
+     * - 支持 "12" 消歧：首行/上午（rowOrdinal in 0..1）解码为 [1, 2]，末行/晚上（rowOrdinal >= 4 或含 "第12"）解码为 [12]
+     * - 支持非补零双位连写："23"->[2,3], "34"->[3,4], "45"->[4,5], "56"->[5,6], "67"->[6,7], "78"->[7,8], "89"->[8,9]
+     * - 支持多位连续连写："0102"->[1,2], "1011"->[10,11], "091011"->[9,10,11], "910"->[9,10], "123"->[1,2,3], "101112"->[10,11,12]
+     */
+    internal fun decodeDigitTokenToSections(tok: String, rowOrdinal: Int = -1, fullHeader: String = ""): List<Int> {
+        if (tok.isEmpty()) return emptyList()
+        if (tok == "12") {
+            return when {
+                rowOrdinal in 0..1 -> listOf(1, 2)
+                rowOrdinal >= 4 -> listOf(12)
+                fullHeader.contains("第12") || fullHeader.contains("晚") -> listOf(12)
+                fullHeader.contains("上午") || fullHeader.contains("早") -> listOf(1, 2)
+                // 无行号上下文时："12节" 默认按首行 "1、2节" 处理；纯数字 "12"（如 "11-12" 的右端点）按 12 处理
+                fullHeader.contains("12节") && !fullHeader.contains("-") && !fullHeader.contains(",") -> listOf(1, 2)
+                else -> listOf(12)
+            }
+        }
+        if (tok.length == 1) {
+            val v = tok.toIntOrNull() ?: return emptyList()
+            return if (v in 1..9) listOf(v) else emptyList()
+        }
+        if (tok.length == 2) {
+            val a = tok[0].digitToInt()
+            val b = tok[1].digitToInt()
+            if (a in 1..8 && b == a + 1) {
+                return listOf(a, b)
+            }
+            val v = tok.toIntOrNull() ?: return emptyList()
+            return if (v in 1..18) listOf(v) else emptyList()
+        }
+        // 偶数位补零紧凑格式："0102"、"0304"、"1011"、"050607"、"091011"、"101112"
+        if (tok.length % 2 == 0) {
+            val pairs = tok.chunked(2).mapNotNull { it.toIntOrNull() }
+            if (pairs.size >= 2 && pairs.all { it in 1..18 } && pairs.zipWithNext().all { (x, y) -> y == x + 1 }) {
+                return pairs
+            }
+        }
+        // 非补零多位连续节次："123"、"234"、"345"、"567"、"678"、"789"、"910"、"8910"、"91011"
+        for (start in 1..17) {
+            for (end in (start + 1)..minOf(18, start + 5)) {
+                if ((start..end).joinToString("") == tok) {
+                    return (start..end).toList()
+                }
+            }
+        }
+        return emptyList()
+    }
+
+    private fun numbersRange(text: String, rowOrdinal: Int = -1): Pair<Int, Int>? {
+        val nums = Regex("\\d+").findAll(text)
+            .flatMap { m -> decodeDigitTokenToSections(m.value, rowOrdinal, text) }
             .filter { it in 1..18 }
             .toList()
         if (nums.isEmpty()) return null
         val min = nums.min()
         val max = nums.max()
-        // 行头的节次跨度不应超过 5 节，否则很可能混入了无关数字
-        return if (max - min <= 4) min to max else null
+        // 行头的节次跨度不应超过 6 节，否则很可能混入了无关数字
+        return if (max - min <= 5) min to max else null
     }
 }

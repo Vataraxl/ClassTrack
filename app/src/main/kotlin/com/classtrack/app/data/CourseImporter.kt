@@ -616,12 +616,13 @@ ${buildEmptyThemeTemplateJson()}
             }
         }
 
-        // 3.5 匹配紧凑双位连排节次（如 [0102节]、[010203节]、0102节、[0102]），防止被单节正则截尾误判为 02节
-        val compactMatch = Regex("(?<!\\d)(?:第|[\\[(（【])?\\s*((?:0[1-9]|1[0-8]){2,6})\\s*(?:小?节|[\\])）】])").find(sanitized)
+        // 3.5 匹配紧凑双位或非补零连续节次（如 [0102节]、[010203节]、1011节、34节、67节、89节、910节、101112节、[0102]）
+        val compactMatch = Regex("(?<!\\d)(?:第|[\\[(（【])?\\s*(\\d{2,12})\\s*(?:小?节|[\\])）】])").find(sanitized)
         if (compactMatch != null) {
-            val nums = compactMatch.groupValues[1].chunked(2).mapNotNull { it.toIntOrNull() }.filter { it in 1..18 }
-            if (nums.size >= 2) {
-                return Pair(nums.minOrNull()!!, nums.maxOrNull()!!)
+            val tok = compactMatch.groupValues[1]
+            val decoded = TimetableCellParser.decodeDigitTokenToSections(tok, -1, sanitized)
+            if (decoded.size >= 2) {
+                return Pair(decoded.minOrNull()!!, decoded.maxOrNull()!!)
             }
         }
 
@@ -851,72 +852,58 @@ ${buildEmptyThemeTemplateJson()}
         val mergedResult = mutableListOf<CourseItem>()
 
         for ((_, group) in grouped) {
-            // 将课程放入可变池，执行多轮收敛合并 (Fixpoint Multi-Pass Merge)
             val pool = group.toMutableList()
-            var modified = true
 
-            while (modified) {
-                modified = false
-                outer@ for (i in 0 until pool.size) {
+            fun applyWeeksSet(template: CourseItem, weeks: Set<Int>): CourseItem {
+                val sorted = weeks.filter { it in 1..40 }.sorted()
+                if (sorted.isEmpty()) return template
+                val minW = sorted.first()
+                val maxW = sorted.last()
+                val spec = if (sorted.size < (maxW - minW + 1)) compressWeeksList(sorted) else ""
+                return template.copy(
+                    startWeek = minW,
+                    endWeek = maxW,
+                    weeksSpec = spec,
+                    weekParity = if (spec.isNotBlank()) WeekParity.ALL else template.weekParity
+                )
+            }
+
+            // -----------------------------------------------------------------
+            // 阶段 1：跨节次纵向缝合优先（如 3-4节 + 5节 → 3-5节；10-11节 + 12节 → 10-12节；6-7节 + 8-9节 → 6-9节）
+            // 必须在同节次跨周次合并之前执行，并支持周次交集拆分：
+            // 即使 10-11节 已跨 12-15周、而 12节 仅在 12-13周，也会将 12-13周 精准缝合为 10-12节（3节长课），14-15周 保留为 10-11节！
+            // -----------------------------------------------------------------
+            var verticalModified = true
+            while (verticalModified) {
+                verticalModified = false
+                outerVertical@ for (i in 0 until pool.size) {
                     for (j in i + 1 until pool.size) {
                         val a = pool[i]
                         val b = pool[j]
 
-                        val aWeeks = getActiveWeeks(a)
-                        val bWeeks = getActiveWeeks(b)
-
-                        // 场景 A：完全相同的节次，检查是否为不同周次的同门课延续（如 1-8 周 + 9-16 周）
                         val isSameSection = (a.startSection == b.startSection && a.endSection == b.endSection)
-
-                        // 场景 B：节次相邻或重叠（如 1-2 节 + 3 节合并为 1-3 节；1-2 节 + 3-4 节；1-3 节 + 2-3 节去重）
                         val isSectionAdjacentOrOverlapping =
                             (a.startSection <= b.endSection + 1) && (b.startSection <= a.endSection + 1)
+                        if (isSameSection || !isSectionAdjacentOrOverlapping) continue
 
-                        if (!isSameSection && !isSectionAdjacentOrOverlapping) continue
-
-                        // 教师与教室兼容性校验
                         val roomCompatible = a.room.isBlank() || a.room == "待定教室" ||
                             b.room.isBlank() || b.room == "待定教室" ||
                             a.room == b.room
                         val teacherCompatible = a.teacher.isBlank() || b.teacher.isBlank() ||
                             a.teacher == b.teacher
-
                         if (!roomCompatible || !teacherCompatible) continue
 
-                        // 周次兼容性校验：
-                        // 1. 如果是不同节次相邻合并（加长课缝合），两门课在学期中的活跃周次必须完全一致（aWeeks == bWeeks）！
-                        //    严禁将 1-16 周的 1-2 节与 1-8 周的 3-4 节错误合并为全学期 1-4 节，否则在 9-16 周会凭空产生幽灵课程！
-                        // 2. 如果是相同节次跨周延续（如 1-8 周 + 9-16 周），两者的周次可相接或有交集进行周次延展。
-                        if (!isSameSection) {
-                            if (aWeeks.isEmpty() || bWeeks.isEmpty() || aWeeks != bWeeks) {
-                                continue
-                            }
+                        val aWeeks = getActiveWeeks(a)
+                        val bWeeks = getActiveWeeks(b)
+                        val commonWeeks = aWeeks intersect bWeeks
+                        if (commonWeeks.isEmpty()) continue
 
-                            // 单双周属性校验
-                            if (a.weekParity != b.weekParity &&
-                                a.weekParity != WeekParity.ALL &&
-                                b.weekParity != WeekParity.ALL
-                            ) {
-                                continue
-                            }
-                        } else {
-                            // 同节次跨周合并：无论是连续周还是离散周次（如 1-8 周 + 10-16 周跳周），只要属于同星期、同节次且教室教师兼容，均收敛合并为一个完整的离散周次课条
-                        }
-
-                        // 命中合并规则！
                         var mergedStartSec = minOf(a.startSection, b.startSection)
                         var mergedEndSec = maxOf(a.endSection, b.endSection)
-
-                        // 专门处理 3 节加长课场景：
-                        // 如果教务系统排成 [1-2] 和 [3-4]（两个2节课），或 [5-6] 和 [7-8]，但课程名或备注提示为 3 节/3学时/1-3节等，
-                        // 且合并后的总跨度超过 3 节，纠正结束节次为 mergedStartSec + 2（精准 3 节），彻底杜绝变成 4 节！
                         val isThreeSectionHint = hasThreeSectionHint(a.name, b.name, a.note, b.note)
                         if (isThreeSectionHint && (mergedEndSec - mergedStartSec + 1) > 3) {
                             mergedEndSec = mergedStartSec + 2
                         }
-
-                        val mergedStartWeek = minOf(a.startWeek, b.startWeek)
-                        val mergedEndWeek = maxOf(a.endWeek, b.endWeek)
 
                         val preferredRoom = when {
                             a.room.isNotBlank() && a.room != "待定教室" -> a.room
@@ -928,42 +915,92 @@ ${buildEmptyThemeTemplateJson()}
                             b.teacher.isNotBlank() -> b.teacher
                             else -> ""
                         }
-                        val preferredParity = when {
-                            a.weekParity != WeekParity.ALL -> a.weekParity
-                            b.weekParity != WeekParity.ALL -> b.weekParity
-                            else -> WeekParity.ALL
-                        }
-
-                        val unionWeeks = (aWeeks union bWeeks).sorted()
-                        val combinedWeeksSpec = if (unionWeeks.isNotEmpty()) {
-                            compressWeeksList(unionWeeks)
-                        } else {
-                            listOf(a.weeksSpec, b.weeksSpec)
-                                .filter { it.isNotBlank() }
-                                .flatMap { it.split(",") }
-                                .mapNotNull { it.trim().takeIf { s -> s.isNotEmpty() } }
-                                .distinct()
-                                .joinToString(",")
-                        }
-
                         val preferredName = if (a.name.length >= b.name.length) a.name else b.name
+                        val preferredParity = if (a.weekParity == b.weekParity) a.weekParity else WeekParity.ALL
 
-                        val mergedCourse = a.copy(
+                        val stitchedBase = a.copy(
                             name = preferredName,
                             room = preferredRoom,
                             teacher = preferredTeacher,
                             startSection = mergedStartSec,
                             endSection = mergedEndSec,
-                            startWeek = mergedStartWeek,
-                            endWeek = mergedEndWeek,
-                            weeksSpec = combinedWeeksSpec,
                             weekParity = preferredParity
+                        )
+                        val stitched = applyWeeksSet(stitchedBase, commonWeeks)
+                        val aOnlyWeeks = aWeeks - commonWeeks
+                        val bOnlyWeeks = bWeeks - commonWeeks
+
+                        pool.removeAt(j)
+                        pool.removeAt(i)
+                        pool.add(stitched)
+                        if (aOnlyWeeks.isNotEmpty()) {
+                            pool.add(applyWeeksSet(a, aOnlyWeeks))
+                        }
+                        if (bOnlyWeeks.isNotEmpty()) {
+                            pool.add(applyWeeksSet(b, bOnlyWeeks))
+                        }
+                        verticalModified = true
+                        break@outerVertical
+                    }
+                }
+            }
+
+            // -----------------------------------------------------------------
+            // 阶段 2：同节次跨周次收敛合并（如相同节次、相同教室、相同教师的离散周次合并为一条）
+            // -----------------------------------------------------------------
+            var horizontalModified = true
+            while (horizontalModified) {
+                horizontalModified = false
+                outerHorizontal@ for (i in 0 until pool.size) {
+                    for (j in i + 1 until pool.size) {
+                        val a = pool[i]
+                        val b = pool[j]
+
+                        if (a.startSection != b.startSection || a.endSection != b.endSection) continue
+
+                        val aWeeks = getActiveWeeks(a)
+                        val bWeeks = getActiveWeeks(b)
+
+                        // 若周次完全相同（重复格子），允许一方教室/教师为空并互补；若为不同周次，则要求教室与教师一致才合并
+                        val sameWeeks = aWeeks == bWeeks
+                        val roomCompatible = if (sameWeeks) {
+                            a.room.isBlank() || a.room == "待定教室" || b.room.isBlank() || b.room == "待定教室" || a.room == b.room
+                        } else {
+                            a.room == b.room
+                        }
+                        val teacherCompatible = if (sameWeeks) {
+                            a.teacher.isBlank() || b.teacher.isBlank() || a.teacher == b.teacher
+                        } else {
+                            a.teacher == b.teacher
+                        }
+                        if (!roomCompatible || !teacherCompatible) continue
+
+                        val preferredRoom = when {
+                            a.room.isNotBlank() && a.room != "待定教室" -> a.room
+                            b.room.isNotBlank() && b.room != "待定教室" -> b.room
+                            else -> "待定教室"
+                        }
+                        val preferredTeacher = when {
+                            a.teacher.isNotBlank() -> a.teacher
+                            b.teacher.isNotBlank() -> b.teacher
+                            else -> ""
+                        }
+                        val preferredName = if (a.name.length >= b.name.length) a.name else b.name
+                        val unionWeeks = aWeeks union bWeeks
+                        val merged = applyWeeksSet(
+                            a.copy(
+                                name = preferredName,
+                                room = preferredRoom,
+                                teacher = preferredTeacher,
+                                weekParity = if (a.weekParity == b.weekParity) a.weekParity else WeekParity.ALL
+                            ),
+                            unionWeeks
                         )
 
                         pool.removeAt(j)
-                        pool[i] = mergedCourse
-                        modified = true
-                        break@outer
+                        pool[i] = merged
+                        horizontalModified = true
+                        break@outerHorizontal
                     }
                 }
             }
@@ -1474,7 +1511,7 @@ ${buildEmptyThemeTemplateJson()}
                     rowHeader[rr] = parts.join(' ').replace(/\s+/g, ' ').trim();
                     var rh = rowHeader[rr];
                     var rowCellsCount = (rows[rr] && rows[rr].cells) ? rows[rr].cells.length : 0;
-                    var isSeparator = !rh || rh.indexOf('备注') >= 0 || rh.indexOf('说明') >= 0 || rh.indexOf('合计') >= 0 ||
+                    var isSeparator = !rh || rh.indexOf('备注') >= 0 || rh.indexOf('说明') >= 0 || rh.indexOf('合计') >= 0 || rh.indexOf('安排') >= 0 ||
                         (rowCellsCount <= 2 && (rh === '午休' || rh === '中午' || rh === '下午' || rh === '晚上' || rh === '晚自习'));
                     if (rr > headerRow && !isSeparator) {
                         rowOrdinal[rr] = ord++;
@@ -1516,7 +1553,7 @@ ${buildEmptyThemeTemplateJson()}
             }
 
             function splitCellSegments(html) {
-                return String(html || '').split(/(?:-{4,}|={4,}|<hr\b[^>]*>)/i);
+                return String(html || '').split(/(?:<br\s*\/?>|\n|^)\s*(?:-{2,}|={2,}|─{2,}|—{2,})\s*(?=<br\s*\/?>|\n|$)|-{3,}|={3,}|<hr\b[^>]*>/i);
             }
 
             function emit(source, day, rowStart, rowEnd, rowHeader, rowOrdinal, html) {
