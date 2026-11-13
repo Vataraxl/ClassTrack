@@ -1,24 +1,24 @@
 package com.classtrack.app
 
-import android.content.Context
 import android.os.Build
 import android.os.Bundle
-import android.view.Display
-import android.view.Window
-import android.view.WindowManager
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import com.classtrack.app.system.ColorOsFluidCloudHelper
 import com.classtrack.app.system.CourseAlarmScheduler
+import com.classtrack.app.system.CourseAlarmWatchdogJobService
 
 class MainActivity : ComponentActivity() {
+
+    private var lastBackgroundDispatchMs: Long = 0L
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         applyNativeHighRefreshRate()
         ColorOsFluidCloudHelper.ensureNotificationChannel(this)
         requestNotificationPermissionIfNeeded()
-        // 全自动课前提醒闹钟排程：无论用户是否打开应用，提前精准唤醒
+        CourseAlarmWatchdogJobService.ensureScheduled(this)
         CourseAlarmScheduler.rescheduleAll(this)
         enableEdgeToEdge()
         setContent {
@@ -29,18 +29,29 @@ class MainActivity : ComponentActivity() {
     override fun onResume() {
         super.onResume()
         applyNativeHighRefreshRate()
+        CourseAlarmWatchdogJobService.ensureScheduled(this)
+        CourseAlarmScheduler.rescheduleAll(this)
+        // 若当前恰好处于上课或课前提醒窗口且未主动收起，打开/返回应用时同步刷新实时分钟与点阵
+        ColorOsFluidCloudHelper.postOrUpdateActiveLiveReminder(
+            context = this,
+            isSilentUpdate = true
+        )
     }
 
     override fun onUserLeaveHint() {
         super.onUserLeaveHint()
-        // 用户按 Home 键或上滑退出至桌面时，立即自动唤起流体云与状态栏实况胶囊
-        ColorOsFluidCloudHelper.triggerAutoBackgroundFluidCloud(this)
-        CourseAlarmScheduler.rescheduleAll(this)
+        dispatchBackgroundLiveSync()
     }
 
     override fun onStop() {
         super.onStop()
-        // 用户退出应用或退至桌面时，若开启了流体云则自动触发当前课程的固定宽度横向跑马灯实况流体云
+        dispatchBackgroundLiveSync()
+    }
+
+    private fun dispatchBackgroundLiveSync() {
+        val nowMs = System.currentTimeMillis()
+        if (nowMs - lastBackgroundDispatchMs < 1500L) return
+        lastBackgroundDispatchMs = nowMs
         ColorOsFluidCloudHelper.triggerAutoBackgroundFluidCloud(this)
         CourseAlarmScheduler.rescheduleAll(this)
     }
@@ -69,7 +80,6 @@ class MainActivity : ComponentActivity() {
                 }
 
                 currentDisplay?.supportedModes?.let { modes ->
-                    // 挑选刷新率最高的 Display.Mode（如 90Hz, 120Hz, 144Hz 等）
                     val highestRefreshMode = modes.maxByOrNull { it.refreshRate }
                     if (highestRefreshMode != null && highestRefreshMode.refreshRate >= 80f) {
                         val lp = window.attributes

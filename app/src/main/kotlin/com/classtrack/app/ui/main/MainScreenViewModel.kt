@@ -9,13 +9,17 @@ import com.classtrack.app.data.model.ArtistTheme
 import com.classtrack.app.data.model.CourseItem
 import com.classtrack.app.data.model.CustomThemeConfig
 import com.classtrack.app.data.model.LyricQuote
+import com.classtrack.app.data.model.NotificationCardStyle
 import com.classtrack.app.data.model.TimeSlot
 import com.classtrack.app.data.model.TodayTrackUiModel
 import com.classtrack.app.data.model.TrackPlayState
 import com.classtrack.app.data.model.UiStyle
 import com.classtrack.app.system.ColorOsFluidCloudHelper
+import com.classtrack.app.system.CourseAlarmScheduler
+import com.classtrack.app.system.CourseAlarmWatchdogJobService
 import com.classtrack.app.system.LiveCapsuleOsFamily
 import com.classtrack.app.widget.ClassTrackWidgetProvider
+import java.time.LocalDateTime
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -58,8 +62,10 @@ class MainScreenViewModel(application: Application) : AndroidViewModel(applicati
     val fluidCloudEnabled: StateFlow<Boolean> = repository.fluidCloudEnabled
     val watchBridgeEnabled: StateFlow<Boolean> = repository.watchBridgeEnabled
     val leadMinutes: StateFlow<Int> = repository.leadMinutes
+    val notificationCardStyle: StateFlow<NotificationCardStyle> = repository.notificationCardStyle
+    val alarmClockPriorityEnabled: StateFlow<Boolean> = repository.alarmClockPriorityEnabled
     val uiStyle: StateFlow<UiStyle> = repository.uiStyle
-    val nextReminderInfo: StateFlow<String> = com.classtrack.app.system.CourseAlarmScheduler.nextReminderInfo
+    val nextReminderInfo: StateFlow<String> = CourseAlarmScheduler.nextReminderInfo
 
     private val _uiStyleTransitionTrigger = MutableStateFlow<UiStyleTransitionEvent?>(null)
     val uiStyleTransitionTrigger: StateFlow<UiStyleTransitionEvent?> = _uiStyleTransitionTrigger.asStateFlow()
@@ -361,8 +367,18 @@ class MainScreenViewModel(application: Application) : AndroidViewModel(applicati
         repository.setFluidCloudEnabled(enabled)
         if (!enabled) {
             ColorOsFluidCloudHelper.cancelFluidCloudNotification(getApplication())
+            CourseAlarmScheduler.cancelLiveTick(getApplication())
+            CourseAlarmWatchdogJobService.cancel(getApplication())
+        } else {
+            CourseAlarmWatchdogJobService.ensureScheduled(getApplication())
         }
-        com.classtrack.app.system.CourseAlarmScheduler.rescheduleAll(getApplication())
+        CourseAlarmScheduler.rescheduleAll(getApplication())
+        if (enabled) {
+            ColorOsFluidCloudHelper.postOrUpdateActiveLiveReminder(
+                context = getApplication(),
+                isSilentUpdate = true
+            )
+        }
     }
 
     fun setWatchBridgeEnabled(enabled: Boolean) {
@@ -371,7 +387,28 @@ class MainScreenViewModel(application: Application) : AndroidViewModel(applicati
 
     fun setLeadMinutes(minutes: Int) {
         repository.setLeadMinutes(minutes)
-        com.classtrack.app.system.CourseAlarmScheduler.rescheduleAll(getApplication())
+        CourseAlarmScheduler.rescheduleAll(getApplication())
+        ColorOsFluidCloudHelper.postOrUpdateActiveLiveReminder(
+            context = getApplication(),
+            isSilentUpdate = true
+        )
+    }
+
+    fun setNotificationCardStyle(style: NotificationCardStyle) {
+        repository.setNotificationCardStyle(style)
+        _toastMessage.value = "已切换通知样式：【${style.displayName}】"
+        if (ColorOsFluidCloudHelper.islandPreviewState.value.isActive) {
+            triggerFluidCloudLivePreview(getApplication())
+        }
+    }
+
+    fun setAlarmClockPriorityEnabled(enabled: Boolean) {
+        repository.setAlarmClockPriorityEnabled(enabled)
+        _toastMessage.value = if (enabled) {
+            "已开启强力闹钟级唤醒（穿透省电冻结与墓碑）"
+        } else {
+            "已切换为标准精确闹钟模式"
+        }
     }
 
     fun testWatchBridge(context: Context) {
@@ -380,52 +417,83 @@ class MainScreenViewModel(application: Application) : AndroidViewModel(applicati
     }
 
     fun refreshAutomaticAlarms(context: Context) {
-        com.classtrack.app.system.CourseAlarmScheduler.rescheduleAll(context)
-        _toastMessage.value = "已重新规划全自动课前提醒闹钟"
+        CourseAlarmScheduler.rescheduleAll(context)
+        _toastMessage.value = "已重新规划全自动课前 / 上课 / 下课 RTC 闹钟链"
     }
 
     fun triggerFluidCloudLivePreview(
         context: Context,
         preferredOsFamily: LiveCapsuleOsFamily = LiveCapsuleOsFamily.AUTO
     ) {
-        val todayTracks = buildTracksForSelectedDay()
-        val targetTrack = todayTracks.firstOrNull { it.playState == TrackPlayState.NOW_PLAYING }
-            ?: todayTracks.firstOrNull { it.playState == TrackPlayState.UPCOMING }
-            ?: todayTracks.firstOrNull()
-            ?: TodayTrackUiModel(
-                trackNumber = 1,
-                course = CourseItem(
-                    name = "高等数学",
-                    room = "二教 209",
-                    teacher = "指导教师",
-                    dayOfWeek = selectedDayOfWeek.value,
-                    startSection = 1,
-                    endSection = 2
-                ),
-                startTime = "08:00",
-                endTime = "09:35",
-                playState = TrackPlayState.UPCOMING,
-                progressFraction = 0.35f,
-                minutesUntilStartOrEnd = 15
+        repository.clearDismissedSession()
+        val now = LocalDateTime.now()
+        val realActive = repository.resolveActiveOrUpcomingTrack(
+            now = now,
+            leadMinutes = repository.leadMinutes.value,
+            allowAnyUpcomingToday = false,
+            respectDismissed = false
+        )
+
+        if (realActive != null && realActive.playState != TrackPlayState.COMPLETED) {
+            val diag = ColorOsFluidCloudHelper.postOrUpdateActiveLiveReminder(
+                context = context,
+                isSilentUpdate = false,
+                respectDismissed = false,
+                referenceNow = now
             )
+            _toastMessage.value = if (diag == null) {
+                "请先开启流体云提醒总开关"
+            } else if (diag.cardStyle == NotificationCardStyle.LIVE_CAPSULE && !diag.canPostPromoted) {
+                "已推送实况通知；如需顶栏胶囊收缩请开启实况权限"
+            } else {
+                diag.statusSummary
+            }
+            return
+        }
+
+        // 当前时段无正在/即将上课课程时，取今日待上课程或示范课程发送静态预览效果（不挂接后台心跳免被误收起）
+        val upcomingToday = repository.resolveActiveOrUpcomingTrack(
+            now = now,
+            allowAnyUpcomingToday = true,
+            respectDismissed = false
+        )
+        val previewTrack = upcomingToday ?: TodayTrackUiModel(
+            trackNumber = 1,
+            course = CourseItem(
+                name = "无机及分析化学",
+                room = "二教208",
+                teacher = "任课教师",
+                dayOfWeek = now.dayOfWeek.value,
+                startSection = 10,
+                endSection = 11
+            ),
+            startTime = "18:30",
+            endTime = "20:05",
+            playState = TrackPlayState.NOW_PLAYING,
+            progressFraction = 0.24f,
+            minutesUntilStartOrEnd = 72
+        )
 
         try {
             val diag = ColorOsFluidCloudHelper.postFluidCloudTrackNotification(
                 context = context,
-                track = targetTrack.copy(
-                    minutesUntilStartOrEnd = targetTrack.minutesUntilStartOrEnd.takeIf { it > 0 } ?: 12
+                track = previewTrack.copy(
+                    minutesUntilStartOrEnd = previewTrack.minutesUntilStartOrEnd.takeIf { it > 0 } ?: 12
                 ),
                 artistTheme = artistTheme.value,
                 watchBridgeEnabled = watchBridgeEnabled.value,
-                preferredOsFamily = preferredOsFamily
+                preferredOsFamily = preferredOsFamily,
+                cardStyle = notificationCardStyle.value,
+                isSilentUpdate = false,
+                startLiveUpdates = false
             )
-            _toastMessage.value = if (diag.canPostPromoted) {
-                diag.statusSummary
+            _toastMessage.value = if (diag.cardStyle == NotificationCardStyle.LIVE_CAPSULE && !diag.canPostPromoted) {
+                "示范预览已发（如需顶栏胶囊，请点击下方通知权限开关）"
             } else {
-                "请先在系统通知设置中开启实况胶囊 / 流体云权限"
+                "非上课时段示范预览：${diag.statusSummary}"
             }
-        } catch (e: Exception) {
-            _toastMessage.value = "实况已唤起: ${targetTrack.course.name}"
+        } catch (_: Exception) {
+            _toastMessage.value = "示范预览已唤起: ${previewTrack.course.name}"
         }
     }
 }

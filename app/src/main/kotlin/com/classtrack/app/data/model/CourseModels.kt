@@ -359,6 +359,23 @@ data class UniversityPortalPreset(
 )
 
 /**
+ * 通知栏流体云 / 实况卡片呈现样式
+ */
+enum class NotificationCardStyle(
+    val displayName: String,
+    val description: String
+) {
+    DOT_CARD(
+        displayName = "极简点阵流体卡",
+        description = "高清点阵时间轴 · 时间地点首行聚焦 · 紧凑交互胶囊（推荐）"
+    ),
+    LIVE_CAPSULE(
+        displayName = "状态栏实况胶囊",
+        description = "Android 16 原生药丸胶囊（显示在状态栏左上角时钟旁）"
+    )
+}
+
+/**
  * 完整课表备份与导出 JSON 模型（包含每日总节数、作息时间表、课程列表与可选自定义主题）
  */
 @Serializable

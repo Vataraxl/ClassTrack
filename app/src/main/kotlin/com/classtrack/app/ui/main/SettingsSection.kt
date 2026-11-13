@@ -14,6 +14,7 @@ import androidx.compose.animation.slideInHorizontally
 import androidx.compose.animation.slideOutHorizontally
 import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.basicMarquee
 import androidx.compose.foundation.border
@@ -49,6 +50,7 @@ import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
@@ -59,18 +61,25 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.clipToBounds
+import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.LifecycleEventObserver
+import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import com.classtrack.app.data.model.NotificationCardStyle
 import com.classtrack.app.data.model.TimeSlot
 import com.classtrack.app.data.model.UiStyle
 import com.classtrack.app.system.ColorOsFluidCloudHelper
+import com.classtrack.app.system.CourseAlarmScheduler
 import com.classtrack.app.system.LiveCapsuleOsFamily
 import com.classtrack.app.ui.theme.ClassTrackCard
 import com.classtrack.app.ui.theme.ClassTrackSubSurface
@@ -87,6 +96,8 @@ fun SettingsSection(
     fluidCloudEnabled: Boolean,
     watchBridgeEnabled: Boolean,
     leadMinutes: Int,
+    notificationCardStyle: NotificationCardStyle,
+    alarmClockPriorityEnabled: Boolean,
     nextReminderInfo: String,
     onSelectUiStyle: (UiStyle) -> Unit,
     onChangeCurrentWeek: (Int) -> Unit,
@@ -97,6 +108,8 @@ fun SettingsSection(
     onToggleFluidCloud: (Boolean) -> Unit,
     onToggleWatchBridge: (Boolean) -> Unit,
     onChangeLeadMinutes: (Int) -> Unit,
+    onSelectNotificationCardStyle: (NotificationCardStyle) -> Unit,
+    onToggleAlarmClockPriority: (Boolean) -> Unit,
     onTriggerFluidCloudPreview: (LiveCapsuleOsFamily) -> Unit,
     onTestWatchBridge: () -> Unit,
     onRefreshAutomaticAlarms: () -> Unit,
@@ -104,6 +117,7 @@ fun SettingsSection(
 ) {
     val visuals = LocalClassTrackVisuals.current
     val context = LocalContext.current
+    val lifecycleOwner = LocalLifecycleOwner.current
     val scrollState = rememberScrollState()
 
     val detectedOs = remember { ColorOsFluidCloudHelper.detectDeviceOsFamily() }
@@ -112,6 +126,20 @@ fun SettingsSection(
 
     var promotedGranted by remember {
         mutableStateOf(ColorOsFluidCloudHelper.checkPromotedPermission(context))
+    }
+    var alarmReadiness by remember {
+        mutableStateOf(CourseAlarmScheduler.inspectReadiness(context))
+    }
+
+    DisposableEffect(lifecycleOwner, context) {
+        val observer = LifecycleEventObserver { _, event ->
+            if (event == Lifecycle.Event.ON_RESUME) {
+                promotedGranted = ColorOsFluidCloudHelper.checkPromotedPermission(context)
+                alarmReadiness = CourseAlarmScheduler.inspectReadiness(context)
+            }
+        }
+        lifecycleOwner.lifecycle.addObserver(observer)
+        onDispose { lifecycleOwner.lifecycle.removeObserver(observer) }
     }
 
     Column(
@@ -352,13 +380,13 @@ fun SettingsSection(
                         verticalArrangement = Arrangement.spacedBy(2.dp)
                     ) {
                         Text(
-                            text = "流体云与状态栏实况胶囊",
+                            text = "流体云与硬件级 RTC 自动课表提醒",
                             style = MaterialTheme.typography.titleMedium,
                             fontWeight = FontWeight.Bold,
                             color = MaterialTheme.colorScheme.onSurface
                         )
                         Text(
-                            text = "课前状态栏定宽胶囊常驻，轮流展示时间、课程与教室",
+                            text = "课前自动点亮 ➔ 到点秒切上课态 ➔ 逐分同步点阵进度",
                             fontSize = 11.5.sp,
                             color = visuals.mutedTextColor
                         )
@@ -369,8 +397,8 @@ fun SettingsSection(
                     )
                 }
 
-                // 独立状态作用域的状态栏胶囊预览组件
-                NotificationIslandCarouselPreviewCard()
+                // 独立状态作用域卡片 / 胶囊实时效果预览组件
+                NotificationIslandCarouselPreviewCard(cardStyle = notificationCardStyle)
 
                 Row(
                     modifier = Modifier.fillMaxWidth(),
@@ -463,7 +491,108 @@ fun SettingsSection(
                             }
                         }
 
-                        // 全自动后台排程状态
+                        // 通知卡片呈现样式切换（极简点阵流体卡 vs Android 16 实况胶囊）
+                        Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                            Text(
+                                text = "通知卡片视觉样式",
+                                fontSize = 12.5.sp,
+                                fontWeight = FontWeight.SemiBold,
+                                color = MaterialTheme.colorScheme.onSurface
+                            )
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.spacedBy(10.dp)
+                            ) {
+                                NotificationCardStyle.entries.forEach { styleOption ->
+                                    val selected = notificationCardStyle == styleOption
+                                    val border = if (selected) {
+                                        BorderStroke(1.4.dp, MaterialTheme.colorScheme.primary)
+                                    } else {
+                                        BorderStroke(0.7.dp, visuals.cardBorderColor.copy(alpha = 0.55f))
+                                    }
+                                    val bg = if (selected) {
+                                        MaterialTheme.colorScheme.primary.copy(alpha = if (visuals.isDark) 0.14f else 0.08f)
+                                    } else {
+                                        MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.42f)
+                                    }
+                                    Surface(
+                                        modifier = Modifier
+                                            .weight(1f)
+                                            .clip(RoundedCornerShape(12.dp))
+                                            .clickable { onSelectNotificationCardStyle(styleOption) },
+                                        shape = RoundedCornerShape(12.dp),
+                                        color = bg,
+                                        border = border
+                                    ) {
+                                        Column(
+                                            modifier = Modifier.padding(horizontal = 11.dp, vertical = 10.dp),
+                                            verticalArrangement = Arrangement.spacedBy(3.dp)
+                                        ) {
+                                            Row(
+                                                modifier = Modifier.fillMaxWidth(),
+                                                horizontalArrangement = Arrangement.SpaceBetween,
+                                                verticalAlignment = Alignment.CenterVertically
+                                            ) {
+                                                Text(
+                                                    text = styleOption.displayName,
+                                                    fontSize = 12.sp,
+                                                    fontWeight = FontWeight.Bold,
+                                                    color = MaterialTheme.colorScheme.onSurface,
+                                                    maxLines = 1
+                                                )
+                                                if (selected) {
+                                                    Text(
+                                                        text = "●",
+                                                        fontSize = 10.sp,
+                                                        color = MaterialTheme.colorScheme.primary
+                                                    )
+                                                }
+                                            }
+                                            Text(
+                                                text = if (styleOption == NotificationCardStyle.DOT_CARD) {
+                                                    "28点时间轴 · 高级极简卡"
+                                                } else {
+                                                    "状态栏左上角药丸胶囊"
+                                                },
+                                                fontSize = 10.5.sp,
+                                                color = visuals.mutedTextColor,
+                                                maxLines = 1
+                                            )
+                                        }
+                                    }
+                                }
+                            }
+                        }
+
+                        // 强力闹钟级唤醒开关（使用 setAlarmClock 穿透 ColorOS 墓碑）
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Column(
+                                modifier = Modifier.weight(1f),
+                                verticalArrangement = Arrangement.spacedBy(2.dp)
+                            ) {
+                                Text(
+                                    text = "强力闹钟级唤醒 (穿透系统墓碑)",
+                                    fontSize = 13.sp,
+                                    fontWeight = FontWeight.SemiBold,
+                                    color = MaterialTheme.colorScheme.onSurface
+                                )
+                                Text(
+                                    text = "对近期关键节点启用 AlarmClock 硬件唤醒，关应用也可准时弹出",
+                                    fontSize = 10.5.sp,
+                                    color = visuals.mutedTextColor
+                                )
+                            }
+                            Switch(
+                                checked = alarmClockPriorityEnabled,
+                                onCheckedChange = onToggleAlarmClockPriority
+                            )
+                        }
+
+                        // 全自动后台排程状态与 3 项免开应用自检面板
                         ClassTrackSubSurface(
                             modifier = Modifier.fillMaxWidth(),
                             shape = RoundedCornerShape(12.dp)
@@ -472,7 +601,7 @@ fun SettingsSection(
                                 modifier = Modifier
                                     .fillMaxWidth()
                                     .padding(horizontal = 14.dp, vertical = 10.dp),
-                                verticalArrangement = Arrangement.spacedBy(4.dp)
+                                verticalArrangement = Arrangement.spacedBy(6.dp)
                             ) {
                                 Row(
                                     modifier = Modifier.fillMaxWidth(),
@@ -480,17 +609,21 @@ fun SettingsSection(
                                     verticalAlignment = Alignment.CenterVertically
                                 ) {
                                     Text(
-                                        text = "RTC 硬件级后台自动唤醒",
+                                        text = "RTC 硬件级全生命周期排程",
                                         fontSize = 12.5.sp,
                                         fontWeight = FontWeight.Bold,
                                         color = MaterialTheme.colorScheme.onSurface
                                     )
                                     TextButton(
-                                        onClick = onRefreshAutomaticAlarms,
+                                        onClick = {
+                                            alarmReadiness = CourseAlarmScheduler.inspectReadiness(context)
+                                            promotedGranted = ColorOsFluidCloudHelper.checkPromotedPermission(context)
+                                            onRefreshAutomaticAlarms()
+                                        },
                                         contentPadding = PaddingValues(horizontal = 8.dp, vertical = 0.dp),
                                         modifier = Modifier.height(26.dp)
                                     ) {
-                                        Text("刷新排程", fontSize = 11.sp)
+                                        Text("刷新并自检", fontSize = 11.sp)
                                     }
                                 }
                                 Text(
@@ -500,10 +633,52 @@ fun SettingsSection(
                                     color = MaterialTheme.colorScheme.primary
                                 )
                                 Text(
-                                    text = "无需后台常驻，到点自动唤醒系统状态栏弹出实况胶囊。",
+                                    text = "全天同时排定「课前预热」「准点切换上课」「下课收起」三态节点，不打开 App 亦自动刷新。",
                                     fontSize = 10.5.sp,
                                     color = visuals.mutedTextColor
                                 )
+
+                                HorizontalDivider(
+                                    thickness = 0.5.dp,
+                                    color = visuals.cardBorderColor.copy(alpha = 0.35f)
+                                )
+
+                                // 3 项系统保活权限逐条检测与一键直达
+                                BackgroundReadinessRow(
+                                    label = "1. 精确闹钟权限 (准点变状态关键)",
+                                    isOk = alarmReadiness.canScheduleExactAlarms,
+                                    okText = "已授权",
+                                    fixText = "未开启 · 去授权",
+                                    onFixClick = { CourseAlarmScheduler.openExactAlarmPermissionSettings(context) }
+                                )
+                                BackgroundReadinessRow(
+                                    label = "2. 电池无限制 (防 ColorOS 冻结)",
+                                    isOk = alarmReadiness.isIgnoringBatteryOptimizations,
+                                    okText = "已放行白名单",
+                                    fixText = "受限 · 一键放行",
+                                    onFixClick = { CourseAlarmScheduler.requestIgnoreBatteryOptimizations(context) }
+                                )
+                                BackgroundReadinessRow(
+                                    label = "3. 系统通知与跨天开机自启动",
+                                    isOk = alarmReadiness.areNotificationsEnabled &&
+                                        (notificationCardStyle == NotificationCardStyle.DOT_CARD || promotedGranted),
+                                    okText = "通知就绪",
+                                    fixText = "前往设置",
+                                    onFixClick = { ColorOsFluidCloudHelper.openSystemFluidCloudSettings(context) }
+                                )
+
+                                Row(
+                                    modifier = Modifier.fillMaxWidth(),
+                                    horizontalArrangement = Arrangement.End
+                                ) {
+                                    TextButton(
+                                        onClick = { CourseAlarmScheduler.openOemAutoStartSettings(context) },
+                                        contentPadding = PaddingValues(horizontal = 8.dp, vertical = 0.dp),
+                                        modifier = Modifier.height(26.dp)
+                                    ) {
+                                        Text("打开手机管家「允许自启动」 ➔", fontSize = 11.sp)
+                                    }
+                                }
                             }
                         }
 
@@ -557,71 +732,72 @@ fun SettingsSection(
                             }
                         }
 
-                        // 实况胶囊协议选择
-                        Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                        // 实况胶囊协议与原生权限入口（选择“状态栏实况胶囊”样式时展示）
+                        if (notificationCardStyle == NotificationCardStyle.LIVE_CAPSULE) {
+                            Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                                Row(
+                                    modifier = Modifier.fillMaxWidth(),
+                                    horizontalArrangement = Arrangement.SpaceBetween,
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    Text(
+                                        text = "系统胶囊协议",
+                                        fontSize = 12.5.sp,
+                                        fontWeight = FontWeight.SemiBold,
+                                        color = MaterialTheme.colorScheme.onSurface
+                                    )
+                                    Text(
+                                        text = "当前设备: ${detectedOs.displayName}",
+                                        fontSize = 11.sp,
+                                        color = MaterialTheme.colorScheme.primary
+                                    )
+                                }
+                                Row(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .horizontalScroll(rememberScrollState()),
+                                    horizontalArrangement = Arrangement.spacedBy(6.dp)
+                                ) {
+                                    LiveCapsuleOsFamily.entries.forEach { family ->
+                                        FilterChip(
+                                            selected = selectedOsFamily == family,
+                                            onClick = { selectedOsFamily = family },
+                                            label = {
+                                                Text(
+                                                    text = if (family == LiveCapsuleOsFamily.AUTO) {
+                                                        "自动识别"
+                                                    } else {
+                                                        "${family.displayName} ${family.featureName.substringBefore(" ")}"
+                                                    },
+                                                    fontSize = 11.sp
+                                                )
+                                            }
+                                        )
+                                    }
+                                }
+                            }
+
                             Row(
                                 modifier = Modifier.fillMaxWidth(),
                                 horizontalArrangement = Arrangement.SpaceBetween,
                                 verticalAlignment = Alignment.CenterVertically
                             ) {
                                 Text(
-                                    text = "系统胶囊协议",
-                                    fontSize = 12.5.sp,
-                                    fontWeight = FontWeight.SemiBold,
-                                    color = MaterialTheme.colorScheme.onSurface
+                                    text = if (promotedGranted) "Android 16 实况权限已就绪" else "需开启系统实况通知权限",
+                                    fontSize = 11.5.sp,
+                                    color = if (promotedGranted) visuals.mutedTextColor else MaterialTheme.colorScheme.secondary
                                 )
-                                Text(
-                                    text = "当前设备: ${detectedOs.displayName}",
-                                    fontSize = 11.sp,
-                                    color = MaterialTheme.colorScheme.primary
-                                )
-                            }
-                            Row(
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .horizontalScroll(rememberScrollState()),
-                                horizontalArrangement = Arrangement.spacedBy(6.dp)
-                            ) {
-                                LiveCapsuleOsFamily.entries.forEach { family ->
-                                    FilterChip(
-                                        selected = selectedOsFamily == family,
-                                        onClick = { selectedOsFamily = family },
-                                        label = {
-                                            Text(
-                                                text = if (family == LiveCapsuleOsFamily.AUTO) {
-                                                    "自动识别"
-                                                } else {
-                                                    "${family.displayName} ${family.featureName.substringBefore(" ")}"
-                                                },
-                                                fontSize = 11.sp
-                                            )
-                                        }
+                                TextButton(
+                                    onClick = { ColorOsFluidCloudHelper.openSystemFluidCloudSettings(context) },
+                                    contentPadding = PaddingValues(horizontal = 8.dp, vertical = 0.dp),
+                                    modifier = Modifier.height(28.dp)
+                                ) {
+                                    Text(
+                                        text = if (promotedGranted) "权限设置" else "去开启",
+                                        fontSize = 11.5.sp,
+                                        fontWeight = FontWeight.Bold
                                     )
                                 }
-                            }
-                        }
-
-                        // 系统权限快捷入口
-                        Row(
-                            modifier = Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.SpaceBetween,
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
-                            Text(
-                                text = if (promotedGranted) "系统实况胶囊权限已就绪" else "需开启系统实况通知权限",
-                                fontSize = 11.5.sp,
-                                color = if (promotedGranted) visuals.mutedTextColor else MaterialTheme.colorScheme.secondary
-                            )
-                            TextButton(
-                                onClick = { ColorOsFluidCloudHelper.openSystemFluidCloudSettings(context) },
-                                contentPadding = PaddingValues(horizontal = 8.dp, vertical = 0.dp),
-                                modifier = Modifier.height(28.dp)
-                            ) {
-                                Text(
-                                    text = if (promotedGranted) "权限设置" else "去开启",
-                                    fontSize = 11.5.sp,
-                                    fontWeight = FontWeight.Bold
-                                )
                             }
                         }
                     }
@@ -724,25 +900,241 @@ private fun SettingStepperRow(
  * 与系统状态栏胶囊 1:1 真实对齐（去除底部虚假跑马灯，采用 4.0s 定宽等长短词轮换）
  */
 @Composable
-private fun NotificationIslandCarouselPreviewCard() {
+private fun BackgroundReadinessRow(
+    label: String,
+    isOk: Boolean,
+    okText: String,
+    fixText: String,
+    onFixClick: () -> Unit
+) {
+    val visuals = LocalClassTrackVisuals.current
+    Row(
+        modifier = Modifier.fillMaxWidth(),
+        horizontalArrangement = Arrangement.SpaceBetween,
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Text(
+            text = label,
+            fontSize = 11.sp,
+            color = visuals.mutedTextColor,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis,
+            modifier = Modifier.weight(1f)
+        )
+        Spacer(modifier = Modifier.width(8.dp))
+        Surface(
+            shape = RoundedCornerShape(8.dp),
+            color = if (isOk) {
+                MaterialTheme.colorScheme.primary.copy(alpha = 0.14f)
+            } else {
+                Color(0xFFFF6E5E).copy(alpha = 0.16f)
+            },
+            modifier = Modifier
+                .clip(RoundedCornerShape(8.dp))
+                .clickable(enabled = !isOk, onClick = onFixClick)
+        ) {
+            Text(
+                text = if (isOk) "✓ $okText" else fixText,
+                fontSize = 10.5.sp,
+                fontWeight = FontWeight.Bold,
+                color = if (isOk) MaterialTheme.colorScheme.primary else Color(0xFFFF6E5E),
+                modifier = Modifier.padding(horizontal = 8.dp, vertical = 3.dp)
+            )
+        }
+    }
+}
+
+/**
+ * 独立重组作用域的通知预览组件：
+ * 根据用户所选样式 1:1 实时预览【极简点阵流体卡】或【状态栏实况胶囊】
+ */
+@Composable
+private fun NotificationIslandCarouselPreviewCard(
+    cardStyle: NotificationCardStyle
+) {
     val visuals = LocalClassTrackVisuals.current
     val livePreviewState by ColorOsFluidCloudHelper.islandPreviewState.collectAsStateWithLifecycle()
     var isExpanded by remember { mutableStateOf(false) }
 
     var demoStep by remember { mutableIntStateOf(0) }
-    LaunchedEffect(livePreviewState.isActive) {
+    LaunchedEffect(livePreviewState.isActive, cardStyle) {
         if (!livePreviewState.isActive) {
             while (true) {
-                delay(4000L)
+                delay(3500L)
                 demoStep = (demoStep + 1) % 3
             }
         }
     }
 
+    if (cardStyle == NotificationCardStyle.DOT_CARD) {
+        val isActiveLive = livePreviewState.isActive
+        val headline = if (isActiveLive) {
+            val validRoom = livePreviewState.roomName.takeIf { it.isNotBlank() && it != "待定教室" }
+            if (validRoom != null) "${livePreviewState.timeRange}  $validRoom" else livePreviewState.timeRange
+        } else {
+            "18:30-20:05  二教208"
+        }
+        val courseLine = if (isActiveLive && livePreviewState.fullCourseName.isNotBlank()) {
+            livePreviewState.fullCourseName
+        } else {
+            "无机及分析化学 · 第10-11节"
+        }
+        val statusText = when {
+            isActiveLive && livePreviewState.progressPercent > 0 ->
+                livePreviewState.fullMarqueeText.substringAfterLast("· ").ifBlank { "正在上课" }
+            isActiveLive -> "即将上课"
+            demoStep % 2 == 0 -> "6分钟后上课"
+            else -> "93分钟后下课"
+        }
+        val progressRatio = when {
+            isActiveLive -> (livePreviewState.progressPercent / 100f).coerceIn(0f, 1f)
+            demoStep % 2 == 0 -> 0f
+            else -> 0.14f
+        }
+        val accentCoral = Color(0xFFFF6E5E)
+
+        Surface(
+            shape = RoundedCornerShape(18.dp),
+            color = if (visuals.isDark) Color(0xFF1A1E28) else Color(0xFF211C22),
+            border = BorderStroke(0.8.dp, Color.White.copy(alpha = 0.08f)),
+            modifier = Modifier.fillMaxWidth()
+        ) {
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 16.dp, vertical = 14.dp),
+                verticalArrangement = Arrangement.spacedBy(2.dp)
+            ) {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Text(
+                        text = headline,
+                        fontSize = 15.5.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = Color(0xFFF8FAFC),
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                        modifier = Modifier.weight(1f)
+                    )
+                    Spacer(modifier = Modifier.width(8.dp))
+                    // 迷你黑胶唱盘右上角标
+                    Surface(
+                        shape = RoundedCornerShape(8.dp),
+                        color = Color(0xFF282F3D),
+                        border = BorderStroke(0.6.dp, accentCoral.copy(alpha = 0.45f)),
+                        modifier = Modifier.size(26.dp)
+                    ) {
+                        Box(contentAlignment = Alignment.Center) {
+                            Box(
+                                modifier = Modifier
+                                    .size(16.dp)
+                                    .clip(CircleShape)
+                                    .background(Color(0xFF0F172A)),
+                                contentAlignment = Alignment.Center
+                            ) {
+                                Box(
+                                    modifier = Modifier
+                                        .size(6.dp)
+                                        .clip(CircleShape)
+                                        .background(accentCoral)
+                                )
+                            }
+                        }
+                    }
+                }
+
+                Text(
+                    text = courseLine,
+                    fontSize = 12.sp,
+                    color = Color(0xFFA6B0C0),
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis
+                )
+
+                // 28 点横向高清进度矩阵
+                val dotCount = 28
+                val litDots = if (progressRatio <= 0f) 0 else (progressRatio * dotCount).toInt().coerceIn(1, dotCount)
+                Canvas(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(vertical = 10.dp)
+                        .height(10.dp)
+                ) {
+                    val radius = 2.6.dp.toPx()
+                    val startX = radius + 1f
+                    val usableW = (size.width - startX * 2f).coerceAtLeast(1f)
+                    val stepX = usableW / (dotCount - 1)
+                    val cy = size.height / 2f
+                    for (i in 0 until dotCount) {
+                        val cx = startX + i * stepX
+                        if (i < litDots) {
+                            if (i == litDots - 1) {
+                                drawCircle(
+                                    color = accentCoral.copy(alpha = 0.35f),
+                                    radius = radius * 1.55f,
+                                    center = Offset(cx, cy)
+                                )
+                            }
+                            drawCircle(
+                                color = accentCoral,
+                                radius = radius,
+                                center = Offset(cx, cy)
+                            )
+                        } else {
+                            drawCircle(
+                                color = Color.White.copy(alpha = 0.22f),
+                                radius = radius * 0.9f,
+                                center = Offset(cx, cy)
+                            )
+                        }
+                    }
+                }
+
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    AnimatedContent(
+                        targetState = statusText,
+                        transitionSpec = { fadeIn(tween(200)) togetherWith fadeOut(tween(150)) },
+                        label = "DotCardStatusAnim"
+                    ) { label ->
+                        Text(
+                            text = label,
+                            fontSize = 14.sp,
+                            fontWeight = FontWeight.Bold,
+                            color = accentCoral,
+                            maxLines = 1
+                        )
+                    }
+
+                    Surface(
+                        shape = RoundedCornerShape(16.dp),
+                        color = Color.White.copy(alpha = 0.13f),
+                        border = BorderStroke(0.6.dp, Color.White.copy(alpha = 0.16f))
+                    ) {
+                        Text(
+                            text = "已到教室",
+                            fontSize = 11.sp,
+                            fontWeight = FontWeight.SemiBold,
+                            color = Color(0xFFE2E8F0),
+                            modifier = Modifier.padding(horizontal = 12.dp, vertical = 5.dp)
+                        )
+                    }
+                }
+            }
+        }
+        return
+    }
+
     val demoUnit = when (demoStep % 3) {
         0 -> "高等数学"
         1 -> "二教209"
-        else -> "08:00开课"
+        else -> "6m上课"
     }
 
     val displayCapsuleText = if (livePreviewState.isActive && livePreviewState.islandCapsuleText.isNotBlank()) {
@@ -751,27 +1143,23 @@ private fun NotificationIslandCarouselPreviewCard() {
         demoUnit
     }
 
-    val cardCourseTitle = if (livePreviewState.isActive && livePreviewState.fullCourseName.isNotBlank()) {
-        livePreviewState.fullCourseName
+    val cardHeadline = if (livePreviewState.isActive) {
+        val validRoom = livePreviewState.roomName.takeIf { it.isNotBlank() && it != "待定教室" }
+        if (validRoom != null) "${livePreviewState.timeRange} · $validRoom" else livePreviewState.timeRange
     } else {
-        "高等数学"
+        "18:30-20:05 · 二教208"
     }
 
-    val cardSubtitle = if (livePreviewState.isActive) {
-        val validRoom = livePreviewState.roomName.takeIf { it.isNotBlank() && it != "待定教室" }
-        if (validRoom != null) {
-            "$validRoom · ${livePreviewState.timeRange}"
-        } else {
-            livePreviewState.timeRange
-        }
+    val cardCourseSub = if (livePreviewState.isActive && livePreviewState.fullCourseName.isNotBlank()) {
+        livePreviewState.fullCourseName
     } else {
-        "二教 209 · 08:00 - 09:35"
+        "无机及分析化学"
     }
 
     val cardStatusBadge = if (livePreviewState.isActive && livePreviewState.capsuleRightValue.isNotBlank()) {
         livePreviewState.capsuleRightValue
     } else {
-        "15m后上课"
+        "6m上课"
     }
 
     ClassTrackSubSurface(
@@ -804,7 +1192,7 @@ private fun NotificationIslandCarouselPreviewCard() {
                             )
                     )
                     Text(
-                        text = if (livePreviewState.isActive) "状态栏胶囊已挂载" else "状态栏实况胶囊样式",
+                        text = if (livePreviewState.isActive) "状态栏胶囊已挂载" else "Android 16 实况胶囊样式",
                         fontSize = 11.sp,
                         fontWeight = FontWeight.SemiBold,
                         color = if (livePreviewState.isActive) MaterialTheme.colorScheme.primary else visuals.mutedTextColor
@@ -916,7 +1304,7 @@ private fun NotificationIslandCarouselPreviewCard() {
                             verticalAlignment = Alignment.CenterVertically
                         ) {
                             Text(
-                                text = cardCourseTitle,
+                                text = cardHeadline,
                                 fontSize = 13.sp,
                                 fontWeight = FontWeight.Bold,
                                 color = Color.White,
@@ -930,13 +1318,13 @@ private fun NotificationIslandCarouselPreviewCard() {
                             )
                         }
                         Text(
-                            text = cardSubtitle,
+                            text = cardCourseSub,
                             fontSize = 11.sp,
                             color = Color.White.copy(alpha = 0.78f),
                             maxLines = 1
                         )
                         LinearProgressIndicator(
-                            progress = { if (livePreviewState.isActive) livePreviewState.progressPercent / 100f else 0.35f },
+                            progress = { if (livePreviewState.isActive) livePreviewState.progressPercent / 100f else 0f },
                             modifier = Modifier
                                 .fillMaxWidth()
                                 .height(4.dp)

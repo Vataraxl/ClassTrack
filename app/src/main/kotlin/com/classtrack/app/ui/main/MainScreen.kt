@@ -116,6 +116,8 @@ fun MainScreen(
     val fluidCloudEnabled by viewModel.fluidCloudEnabled.collectAsStateWithLifecycle()
     val watchBridgeEnabled by viewModel.watchBridgeEnabled.collectAsStateWithLifecycle()
     val leadMinutes by viewModel.leadMinutes.collectAsStateWithLifecycle()
+    val notificationCardStyle by viewModel.notificationCardStyle.collectAsStateWithLifecycle()
+    val alarmClockPriorityEnabled by viewModel.alarmClockPriorityEnabled.collectAsStateWithLifecycle()
     val uiStyle by viewModel.uiStyle.collectAsStateWithLifecycle()
     val uiStyleTransition by viewModel.uiStyleTransitionTrigger.collectAsStateWithLifecycle()
     val nextReminderInfo by viewModel.nextReminderInfo.collectAsStateWithLifecycle()
@@ -336,6 +338,8 @@ fun MainScreen(
                                                 fluidCloudEnabled = fluidCloudEnabled,
                                                 watchBridgeEnabled = watchBridgeEnabled,
                                                 leadMinutes = leadMinutes,
+                                                notificationCardStyle = notificationCardStyle,
+                                                alarmClockPriorityEnabled = alarmClockPriorityEnabled,
                                                 nextReminderInfo = nextReminderInfo,
                                                 onSelectUiStyle = { viewModel.setUiStyle(it) },
                                                 onChangeCurrentWeek = { viewModel.setActualCurrentWeek(it) },
@@ -348,6 +352,8 @@ fun MainScreen(
                                                 onToggleFluidCloud = { viewModel.setFluidCloudEnabled(it) },
                                                 onToggleWatchBridge = { viewModel.setWatchBridgeEnabled(it) },
                                                 onChangeLeadMinutes = { viewModel.setLeadMinutes(it) },
+                                                onSelectNotificationCardStyle = { viewModel.setNotificationCardStyle(it) },
+                                                onToggleAlarmClockPriority = { viewModel.setAlarmClockPriorityEnabled(it) },
                                                 onTriggerFluidCloudPreview = handleTriggerFluidCloud,
                                                 onTestWatchBridge = { viewModel.testWatchBridge(context) },
                                                 onRefreshAutomaticAlarms = { viewModel.refreshAutomaticAlarms(context) },

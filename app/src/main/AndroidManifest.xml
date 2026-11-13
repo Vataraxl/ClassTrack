@@ -9,6 +9,8 @@
     <uses-permission android:name="android.permission.SCHEDULE_EXACT_ALARM" />
     <uses-permission android:name="android.permission.USE_EXACT_ALARM" />
     <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED" />
+    <uses-permission android:name="android.permission.WAKE_LOCK" />
+    <uses-permission android:name="android.permission.REQUEST_IGNORE_BATTERY_OPTIMIZATIONS" />
     <uses-permission android:name="android.permission.VIBRATE" />
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_SPECIAL_USE" />
@@ -84,12 +86,23 @@
             <intent-filter>
                 <action android:name="com.classtrack.app.ACTION_DISMISS_FLUID_CLOUD" />
                 <action android:name="com.classtrack.app.ACTION_TRIGGER_COURSE_REMINDER" />
+                <action android:name="com.classtrack.app.ACTION_LIVE_TICK_FLUID_CLOUD" />
+                <action android:name="com.classtrack.app.ACTION_CHECK_ACTIVE_REMINDER" />
                 <action android:name="com.classtrack.app.ACTION_TEST_WATCH_BRIDGE" />
                 <action android:name="android.intent.action.BOOT_COMPLETED" />
+                <action android:name="android.intent.action.LOCKED_BOOT_COMPLETED" />
+                <action android:name="android.intent.action.MY_PACKAGE_REPLACED" />
                 <action android:name="android.intent.action.TIME_SET" />
                 <action android:name="android.intent.action.TIMEZONE_CHANGED" />
+                <action android:name="android.app.action.SCHEDULE_EXACT_ALARM_PERMISSION_STATE_CHANGED" />
             </intent-filter>
         </receiver>
+
+        <!-- 系统级持久保活巡检任务（兜底校验 RTC 闹钟链与活跃课程状态） -->
+        <service
+            android:name=".system.CourseAlarmWatchdogJobService"
+            android:exported="true"
+            android:permission="android.permission.BIND_JOB_SERVICE" />
 
         <!-- 流体云后台平滑轮播前台服务（防止退后台后被 ColorOS 等系统快速冻结进程） -->
         <service

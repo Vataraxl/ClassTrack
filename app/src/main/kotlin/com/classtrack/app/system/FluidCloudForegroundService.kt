@@ -3,10 +3,17 @@ package com.classtrack.app.system
 import android.app.Service
 import android.content.Context
 import android.content.Intent
+import android.content.pm.ServiceInfo
+import android.os.Build
 import android.os.IBinder
+import androidx.core.app.ServiceCompat
 import com.classtrack.app.data.DataRepository
+import com.classtrack.app.data.model.CourseItem
+import com.classtrack.app.data.model.NotificationCardStyle
 import com.classtrack.app.data.model.TodayTrackUiModel
 import com.classtrack.app.data.model.TrackPlayState
+import java.time.LocalDate
+import java.time.LocalDateTime
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
@@ -15,14 +22,11 @@ import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 
 /**
- * 流体云实况跑马灯后台保活前台服务 (FluidCloudForegroundService)
+ * 实况胶囊后台保活前台服务 (FluidCloudForegroundService)
  *
- * 核心作用：
- * 1. 彻底解决 ColorOS 16/15、OriginOS、HyperOS 等系统在用户退出应用回到桌面后，因“快速进程冻结（Quick Freeze）”
- *    导致主线程 Handler 被系统暂停、状态栏胶囊停止滚动轮播的顽疾；
- * 2. 以官方规范的 Foreground Service 持有实况流体云常驻通知，向系统声明前台任务状态，杜绝被杀或休眠；
- * 3. 内部使用轻量级协程驱动，每 2.0 秒平滑递增轮播步进，在手机状态栏实现稳定从容的【时间 ➔ 课程 ➔ 地点】轮流展示；
- * 4. 任务结束后（如用户点击已到教室打卡、下课或收起）自动 stopSelf() 释放全部系统资源，绿色轻量。
+ * 仅在用户选择 `LIVE_CAPSULE` 状态栏实况胶囊样式且处于活跃窗口时按需启动；
+ * 每一帧均通过 `DataRepository.resolveActiveOrUpcomingTrack(LocalDateTime.now())` 实时计算，
+ * 当课程下课或被「已到教室」收起时立刻 `stopForeground` 释放资源，绝不发送冻结的旧状态。
  */
 class FluidCloudForegroundService : Service() {
 
@@ -39,7 +43,7 @@ class FluidCloudForegroundService : Service() {
                 action = ACTION_START_CAROUSEL
             }
             runCatching {
-                if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.O) {
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
                     context.startForegroundService(intent)
                 } else {
                     context.startService(intent)
@@ -67,14 +71,11 @@ class FluidCloudForegroundService : Service() {
                 stopSelf()
                 return START_NOT_STICKY
             }
-            ACTION_START_CAROUSEL -> {
-                startForegroundCarouselLoop()
-            }
             else -> {
                 startForegroundCarouselLoop()
             }
         }
-        return START_STICKY
+        return START_NOT_STICKY
     }
 
     private fun startForegroundCarouselLoop() {
@@ -82,72 +83,124 @@ class FluidCloudForegroundService : Service() {
         val repository = DataRepository(applicationContext)
 
         carouselJob = serviceScope.launch {
-            var step = 0
+            val now = LocalDateTime.now()
+            val initialTrack = resolveLiveOrFallbackTrack(repository, now)
+            val initialSessionKey = repository.buildSessionKey(
+                date = now.toLocalDate(),
+                courseId = initialTrack.course.id,
+                startSection = initialTrack.course.startSection
+            )
 
-            // 首次先执行一次首帧推送并锁定 startForeground
-            val initialTrack = resolveCurrentTrack(repository)
             val initialNotif = ColorOsFluidCloudHelper.createLiveTrackNotification(
                 context = applicationContext,
                 track = initialTrack,
                 artistTheme = repository.artistTheme.value,
                 watchBridgeEnabled = repository.watchBridgeEnabled.value,
                 carouselFrameIndex = 0,
-                isCarouselTick = false
+                isCarouselTick = true,
+                cardStyle = NotificationCardStyle.LIVE_CAPSULE,
+                sessionKey = initialSessionKey
             )
 
-            runCatching {
-                startForeground(ColorOsFluidCloudHelper.NOTIFICATION_ID_FLUID_TRACK, initialNotif)
+            val started = runCatching {
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE) {
+                    ServiceCompat.startForeground(
+                        this@FluidCloudForegroundService,
+                        ColorOsFluidCloudHelper.NOTIFICATION_ID_FLUID_TRACK,
+                        initialNotif,
+                        ServiceInfo.FOREGROUND_SERVICE_TYPE_SPECIAL_USE
+                    )
+                } else {
+                    startForeground(ColorOsFluidCloudHelper.NOTIFICATION_ID_FLUID_TRACK, initialNotif)
+                }
+                true
+            }.getOrDefault(false)
+
+            if (!started) {
+                stopSelf()
+                return@launch
             }
 
-            // 1.5 秒后（顶端流体云大弹窗收回状态栏通知岛后）立即启动从容轮播
-            delay(1500L)
-            step = 1
+            // 如果首帧只是兜底预览且当前无真实活跃课程，直接 detach 并退出，不滞留空服务
+            val realActive = repository.resolveActiveOrUpcomingTrack(now = now, respectDismissed = true)
+            if (realActive == null || !repository.fluidCloudEnabled.value) {
+                stopForeground(STOP_FOREGROUND_DETACH)
+                stopSelf()
+                return@launch
+            }
 
-            // 轮播循环：每 2.0 秒平稳推进 1 帧（时间 ➔ 课程 ➔ 地点 ➔ 时间）
-            while (isActive && step < 600) {
-                val currentTrack = resolveCurrentTrack(repository)
+            delay(3000L)
+            var step = 1
+
+            while (isActive && step < 480) {
+                if (!repository.fluidCloudEnabled.value ||
+                    repository.notificationCardStyle.value != NotificationCardStyle.LIVE_CAPSULE
+                ) {
+                    break
+                }
+                val tickNow = LocalDateTime.now()
+                val currentTrack = repository.resolveActiveOrUpcomingTrack(
+                    now = tickNow,
+                    leadMinutes = repository.leadMinutes.value,
+                    respectDismissed = true
+                ) ?: break
+
+                if (currentTrack.playState == TrackPlayState.COMPLETED) {
+                    ColorOsFluidCloudHelper.cancelFluidCloudNotification(applicationContext)
+                    break
+                }
+
+                val sessionKey = repository.buildSessionKey(
+                    date = tickNow.toLocalDate(),
+                    courseId = currentTrack.course.id,
+                    startSection = currentTrack.course.startSection
+                )
                 ColorOsFluidCloudHelper.postFluidCloudTrackNotification(
                     context = applicationContext,
                     track = currentTrack,
                     artistTheme = repository.artistTheme.value,
                     watchBridgeEnabled = repository.watchBridgeEnabled.value,
                     carouselFrameIndex = step,
-                    isCarouselTick = true
+                    isCarouselTick = true,
+                    cardStyle = NotificationCardStyle.LIVE_CAPSULE,
+                    sessionKey = sessionKey,
+                    isSilentUpdate = true,
+                    startLiveUpdates = false
                 )
                 step++
-                delay(3000L) // 3.0 秒平稳停顿，大字完整展示时间+课名或地点，杜绝系统限流与视觉眩晕
+                delay(4500L)
             }
 
-            // 达到最大轮播时长后安全退出
             stopForeground(STOP_FOREGROUND_DETACH)
             stopSelf()
         }
     }
 
-    private fun resolveCurrentTrack(repository: DataRepository): TodayTrackUiModel {
-        val tracks = repository.buildTracksForDay(
-            dayOfWeek = repository.selectedDayOfWeek.value,
-            week = repository.currentWeek.value
+    private fun resolveLiveOrFallbackTrack(
+        repository: DataRepository,
+        now: LocalDateTime
+    ): TodayTrackUiModel {
+        return repository.resolveActiveOrUpcomingTrack(
+            now = now,
+            leadMinutes = repository.leadMinutes.value,
+            allowAnyUpcomingToday = false,
+            respectDismissed = true
+        ) ?: TodayTrackUiModel(
+            trackNumber = 1,
+            course = CourseItem(
+                name = "无机及分析化学",
+                room = "二教208",
+                teacher = "任课教师",
+                dayOfWeek = LocalDate.now().dayOfWeek.value,
+                startSection = 10,
+                endSection = 11
+            ),
+            startTime = "18:30",
+            endTime = "20:05",
+            playState = TrackPlayState.UPCOMING,
+            progressFraction = 0f,
+            minutesUntilStartOrEnd = 6
         )
-        return tracks.firstOrNull { it.playState == TrackPlayState.NOW_PLAYING }
-            ?: tracks.firstOrNull { it.playState == TrackPlayState.UPCOMING }
-            ?: tracks.firstOrNull()
-            ?: TodayTrackUiModel(
-                trackNumber = 1,
-                course = com.classtrack.app.data.model.CourseItem(
-                    name = "高等数学",
-                    room = "二教 209",
-                    teacher = "任课教师",
-                    dayOfWeek = repository.selectedDayOfWeek.value,
-                    startSection = 1,
-                    endSection = 2
-                ),
-                startTime = "08:00",
-                endTime = "09:35",
-                playState = TrackPlayState.UPCOMING,
-                progressFraction = 0.35f,
-                minutesUntilStartOrEnd = 15
-            )
     }
 
     override fun onDestroy() {

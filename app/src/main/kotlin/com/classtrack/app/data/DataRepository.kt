@@ -7,13 +7,18 @@ import com.classtrack.app.data.model.CourseItem
 import com.classtrack.app.data.model.CustomThemeConfig
 import com.classtrack.app.data.model.DefaultPresets
 import com.classtrack.app.data.model.LyricQuote
+import com.classtrack.app.data.model.NotificationCardStyle
 import com.classtrack.app.data.model.ScheduleBackup
 import com.classtrack.app.data.model.TimeSlot
 import com.classtrack.app.data.model.TodayTrackUiModel
 import com.classtrack.app.data.model.TrackPlayState
 import com.classtrack.app.data.model.UiStyle
+import com.classtrack.app.system.CourseAlarmScheduler
+import java.time.DayOfWeek
 import java.time.LocalDate
+import java.time.LocalDateTime
 import java.time.LocalTime
+import java.time.temporal.ChronoUnit
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -64,11 +69,11 @@ class DataRepository(context: Context) {
     )
     val scheduleName: StateFlow<String> = _scheduleName.asStateFlow()
 
-    private val _currentWeek = MutableStateFlow(prefs.getInt(KEY_CURRENT_WEEK, 8).coerceIn(1, 24))
-    val currentWeek: StateFlow<Int> = _currentWeek.asStateFlow()
-
-    private val _totalWeeks = MutableStateFlow(prefs.getInt(KEY_TOTAL_WEEKS, 18).coerceIn(1, 24))
+    private val _totalWeeks = MutableStateFlow(prefs.getInt(KEY_TOTAL_WEEKS, 18).coerceIn(1, 30))
     val totalWeeks: StateFlow<Int> = _totalWeeks.asStateFlow()
+
+    private val _currentWeek = MutableStateFlow(loadEffectiveCurrentWeek())
+    val currentWeek: StateFlow<Int> = _currentWeek.asStateFlow()
 
     private val _maxSections = MutableStateFlow(prefs.getInt(KEY_MAX_SECTIONS, 12).coerceIn(4, 18))
     val maxSections: StateFlow<Int> = _maxSections.asStateFlow()
@@ -190,8 +195,66 @@ class DataRepository(context: Context) {
     private val _leadMinutes = MutableStateFlow(prefs.getInt(KEY_LEAD_MINUTES, 20))
     val leadMinutes: StateFlow<Int> = _leadMinutes.asStateFlow()
 
+    private val _notificationCardStyle = MutableStateFlow(loadSavedNotificationCardStyle())
+    val notificationCardStyle: StateFlow<NotificationCardStyle> = _notificationCardStyle.asStateFlow()
+
+    private val _alarmClockPriorityEnabled = MutableStateFlow(
+        prefs.getBoolean(KEY_ALARM_CLOCK_PRIORITY, true)
+    )
+    val alarmClockPriorityEnabled: StateFlow<Boolean> = _alarmClockPriorityEnabled.asStateFlow()
+
     private val _uiStyle = MutableStateFlow(loadSavedUiStyle())
     val uiStyle: StateFlow<UiStyle> = _uiStyle.asStateFlow()
+
+    private fun loadSavedNotificationCardStyle(): NotificationCardStyle {
+        val raw = prefs.getString(KEY_NOTIFICATION_CARD_STYLE, NotificationCardStyle.DOT_CARD.name)
+            ?: NotificationCardStyle.DOT_CARD.name
+        return runCatching { NotificationCardStyle.valueOf(raw) }.getOrDefault(NotificationCardStyle.DOT_CARD)
+    }
+
+    fun setNotificationCardStyle(style: NotificationCardStyle) {
+        _notificationCardStyle.value = style
+        prefs.edit().putString(KEY_NOTIFICATION_CARD_STYLE, style.name).apply()
+    }
+
+    fun setAlarmClockPriorityEnabled(enabled: Boolean) {
+        _alarmClockPriorityEnabled.value = enabled
+        prefs.edit().putBoolean(KEY_ALARM_CLOCK_PRIORITY, enabled).apply()
+        triggerRescheduleSafely()
+    }
+
+    private fun loadEffectiveCurrentWeek(date: LocalDate = LocalDate.now()): Int {
+        val maxW = _totalWeeks.value.coerceIn(1, 30)
+        val anchorStr = prefs.getString(KEY_SEMESTER_START_MONDAY, null)
+        if (!anchorStr.isNullOrBlank()) {
+            val anchor = runCatching { LocalDate.parse(anchorStr) }.getOrNull()
+            if (anchor != null) {
+                val coerced = resolveEffectiveWeek(anchor, date, maxW)
+                if (prefs.getInt(KEY_CURRENT_WEEK, coerced) != coerced) {
+                    prefs.edit().putInt(KEY_CURRENT_WEEK, coerced).apply()
+                }
+                return coerced
+            }
+        }
+        val legacyWeek = prefs.getInt(KEY_CURRENT_WEEK, 8).coerceIn(1, maxW)
+        val derivedAnchor = date.with(DayOfWeek.MONDAY).minusWeeks((legacyWeek - 1).toLong())
+        prefs.edit().putString(KEY_SEMESTER_START_MONDAY, derivedAnchor.toString()).apply()
+        return legacyWeek
+    }
+
+    /**
+     * 基于开机/跨周后依然准确的「第一周周一日期锚点」推算任意日期所属教学周，
+     * 彻底避免用户长时间未打开应用时后台闹钟周次停滞在旧周的问题。
+     */
+    fun getEffectiveCurrentWeek(date: LocalDate = LocalDate.now()): Int {
+        return loadEffectiveCurrentWeek(date)
+    }
+
+    private fun triggerRescheduleSafely() {
+        runCatching {
+            CourseAlarmScheduler.rescheduleAll(appContext)
+        }
+    }
 
     private fun loadSavedUiStyle(): UiStyle {
         val raw = prefs.getString(KEY_UI_STYLE, UiStyle.CLASSIC.name) ?: UiStyle.CLASSIC.name
@@ -387,7 +450,12 @@ class DataRepository(context: Context) {
     fun setCurrentWeek(week: Int) {
         val coerced = week.coerceIn(1, _totalWeeks.value)
         _currentWeek.value = coerced
-        prefs.edit().putInt(KEY_CURRENT_WEEK, coerced).apply()
+        val anchorMonday = LocalDate.now().with(DayOfWeek.MONDAY).minusWeeks((coerced - 1).toLong())
+        prefs.edit()
+            .putInt(KEY_CURRENT_WEEK, coerced)
+            .putString(KEY_SEMESTER_START_MONDAY, anchorMonday.toString())
+            .apply()
+        triggerRescheduleSafely()
     }
 
     fun setTotalWeeks(weeks: Int) {
@@ -396,6 +464,8 @@ class DataRepository(context: Context) {
         prefs.edit().putInt(KEY_TOTAL_WEEKS, coerced).apply()
         if (_currentWeek.value > coerced) {
             setCurrentWeek(coerced)
+        } else {
+            triggerRescheduleSafely()
         }
     }
 
@@ -412,6 +482,7 @@ class DataRepository(context: Context) {
             .putInt(KEY_MAX_SECTIONS, coerced)
             .putString(KEY_TIME_SLOTS_JSON, serialized)
             .apply()
+        triggerRescheduleSafely()
     }
 
     /**
@@ -431,6 +502,7 @@ class DataRepository(context: Context) {
         _timeSlots.value = updated
         val serialized = json.encodeToString(ListSerializer(TimeSlot.serializer()), updated)
         prefs.edit().putString(KEY_TIME_SLOTS_JSON, serialized).apply()
+        triggerRescheduleSafely()
     }
 
     /**
@@ -447,6 +519,7 @@ class DataRepository(context: Context) {
             .putInt(KEY_MAX_SECTIONS, targetMax)
             .putString(KEY_TIME_SLOTS_JSON, serialized)
             .apply()
+        triggerRescheduleSafely()
     }
 
     fun resetTimeSlotsToDefault() {
@@ -456,6 +529,7 @@ class DataRepository(context: Context) {
             .putInt(KEY_MAX_SECTIONS, 12)
             .remove(KEY_TIME_SLOTS_JSON)
             .apply()
+        triggerRescheduleSafely()
     }
 
     fun setScheduleName(name: String) {
@@ -472,6 +546,7 @@ class DataRepository(context: Context) {
     fun setFluidCloudEnabled(enabled: Boolean) {
         _fluidCloudEnabled.value = enabled
         prefs.edit().putBoolean(KEY_FLUID_CLOUD, enabled).apply()
+        triggerRescheduleSafely()
     }
 
     fun setWatchBridgeEnabled(enabled: Boolean) {
@@ -482,21 +557,25 @@ class DataRepository(context: Context) {
     fun setLeadMinutes(minutes: Int) {
         _leadMinutes.value = minutes.coerceIn(5, 60)
         prefs.edit().putInt(KEY_LEAD_MINUTES, _leadMinutes.value).apply()
+        triggerRescheduleSafely()
     }
 
     fun saveCourse(course: CourseItem) {
         dbHelper.upsertCourse(course)
         _courses.value = dbHelper.getAllCourses()
+        triggerRescheduleSafely()
     }
 
     fun deleteCourse(courseId: Long) {
         dbHelper.deleteCourse(courseId)
         _courses.value = dbHelper.getAllCourses()
+        triggerRescheduleSafely()
     }
 
     fun clearAllCourses() {
         dbHelper.clearAllCourses()
         _courses.value = emptyList()
+        triggerRescheduleSafely()
     }
 
     fun resetToSampleCourses() {
@@ -506,6 +585,7 @@ class DataRepository(context: Context) {
     fun replaceCoursesFromImport(imported: List<CourseItem>, backupMeta: ScheduleBackup? = null) {
         dbHelper.replaceAllCourses(imported)
         _courses.value = dbHelper.getAllCourses()
+        clearDismissedSession()
         if (backupMeta != null) {
             if (backupMeta.scheduleName.isNotBlank()) setScheduleName(backupMeta.scheduleName)
             if (backupMeta.totalWeeks > 0) setTotalWeeks(backupMeta.totalWeeks)
@@ -522,6 +602,63 @@ class DataRepository(context: Context) {
                 setArtistTheme(backupMeta.artistTheme)
             }
         }
+        triggerRescheduleSafely()
+    }
+
+    fun buildSessionKey(date: LocalDate, courseId: Long, startSection: Int): String {
+        return "${date}_${courseId}_$startSection"
+    }
+
+    fun markSessionDismissed(sessionKey: String) {
+        if (sessionKey.isNotBlank()) {
+            prefs.edit().putString(KEY_DISMISSED_SESSION_KEY, sessionKey).apply()
+        }
+    }
+
+    fun isSessionDismissed(date: LocalDate, courseId: Long, startSection: Int): Boolean {
+        if (courseId <= 0L) return false
+        val dismissed = prefs.getString(KEY_DISMISSED_SESSION_KEY, null) ?: return false
+        return dismissed == buildSessionKey(date, courseId, startSection)
+    }
+
+    fun clearDismissedSession() {
+        prefs.edit().remove(KEY_DISMISSED_SESSION_KEY).apply()
+    }
+
+    /**
+     * 基于当前精确系统时间解析「正在上课」或「即将上课」课程轨：
+     * 供 RTC 闹钟、每分钟心跳更新、退后台自动拉起、前台服务共用的单一真值来源，绝不使用冻结快照。
+     */
+    fun resolveActiveOrUpcomingTrack(
+        now: LocalDateTime = LocalDateTime.now(),
+        leadMinutes: Int = _leadMinutes.value,
+        targetCourseId: Long = -1L,
+        allowAnyUpcomingToday: Boolean = false,
+        respectDismissed: Boolean = true
+    ): TodayTrackUiModel? {
+        val today = now.toLocalDate()
+        val effectiveWeek = getEffectiveCurrentWeek(today)
+        val tracks = buildTracksForDay(
+            dayOfWeek = now.dayOfWeek.value,
+            week = effectiveWeek,
+            nowTime = now.toLocalTime()
+        )
+
+        val candidates = tracks.filter { track ->
+            val notDismissed = !respectDismissed || !isSessionDismissed(today, track.course.id, track.course.startSection)
+            notDismissed && (
+                track.playState == TrackPlayState.NOW_PLAYING ||
+                    (track.playState == TrackPlayState.UPCOMING &&
+                        (allowAnyUpcomingToday || track.minutesUntilStartOrEnd <= maxOf(leadMinutes, 1)))
+                )
+        }
+        if (candidates.isEmpty()) return null
+
+        if (targetCourseId > 0L) {
+            candidates.firstOrNull { it.course.id == targetCourseId }?.let { return it }
+        }
+        return candidates.firstOrNull { it.playState == TrackPlayState.NOW_PLAYING }
+            ?: candidates.firstOrNull { it.playState == TrackPlayState.UPCOMING }
     }
 
     fun createBackup(): ScheduleBackup {
@@ -542,63 +679,92 @@ class DataRepository(context: Context) {
         week: Int,
         nowTime: LocalTime = LocalTime.now()
     ): List<TodayTrackUiModel> {
-        val slotsMap = _timeSlots.value.associateBy { it.section }
-        val activeCourses = _courses.value
-            .filter { it.dayOfWeek == dayOfWeek && it.isActiveInWeek(week) }
-            .sortedBy { it.startSection }
-
-        val nowMinutes = nowTime.hour * 60 + nowTime.minute
-
-        return activeCourses.mapIndexed { idx, course ->
-            val startStr = slotsMap[course.startSection]?.startTime ?: "08:00"
-            val endStr = slotsMap[course.endSection]?.endTime ?: "09:35"
-
-            val startMin = parseMinutes(startStr)
-            val endMin = parseMinutes(endStr).coerceAtLeast(startMin + 45)
-
-            val playState: TrackPlayState
-            val progress: Float
-            val remainingMin: Int
-
-            when {
-                nowMinutes < startMin -> {
-                    playState = TrackPlayState.UPCOMING
-                    progress = 0f
-                    remainingMin = startMin - nowMinutes
-                }
-                nowMinutes in startMin..endMin -> {
-                    playState = TrackPlayState.NOW_PLAYING
-                    val total = (endMin - startMin).coerceAtLeast(1)
-                    progress = ((nowMinutes - startMin).toFloat() / total.toFloat()).coerceIn(0f, 1f)
-                    remainingMin = (endMin - nowMinutes).coerceAtLeast(0)
-                }
-                else -> {
-                    playState = TrackPlayState.COMPLETED
-                    progress = 1f
-                    remainingMin = 0
-                }
-            }
-
-            TodayTrackUiModel(
-                trackNumber = idx + 1,
-                course = course,
-                startTime = startStr,
-                endTime = endStr,
-                playState = playState,
-                progressFraction = progress,
-                minutesUntilStartOrEnd = remainingMin
-            )
-        }
-    }
-
-    private fun parseMinutes(hhmm: String): Int {
-        val parts = hhmm.split(":")
-        val h = parts.getOrNull(0)?.toIntOrNull() ?: 8
-        val m = parts.getOrNull(1)?.toIntOrNull() ?: 0
-        return h * 60 + m
+        return computeTracksForDay(
+            courses = _courses.value,
+            timeSlots = _timeSlots.value,
+            dayOfWeek = dayOfWeek,
+            week = week,
+            nowTime = nowTime
+        )
     }
 
     companion object {
+        fun resolveEffectiveWeek(
+            semesterStartMonday: LocalDate,
+            targetDate: LocalDate,
+            totalWeeks: Int
+        ): Int {
+            val targetMonday = targetDate.with(DayOfWeek.MONDAY)
+            val week = ChronoUnit.WEEKS.between(semesterStartMonday, targetMonday).toInt() + 1
+            return week.coerceIn(1, totalWeeks.coerceIn(1, 30))
+        }
+
+        fun computeTracksForDay(
+            courses: List<CourseItem>,
+            timeSlots: List<TimeSlot>,
+            dayOfWeek: Int,
+            week: Int,
+            nowTime: LocalTime = LocalTime.now()
+        ): List<TodayTrackUiModel> {
+            val slotsMap = timeSlots.associateBy { it.section }
+            val activeCourses = courses
+                .filter { it.dayOfWeek == dayOfWeek && it.isActiveInWeek(week) }
+                .sortedBy { it.startSection }
+
+            val nowMinutes = nowTime.hour * 60 + nowTime.minute
+            val nowSeconds = nowTime.toSecondOfDay()
+
+            return activeCourses.mapIndexed { idx, course ->
+                val startStr = slotsMap[course.startSection]?.startTime ?: "08:00"
+                val endStr = slotsMap[course.endSection]?.endTime ?: "09:35"
+
+                val startMin = parseMinutes(startStr)
+                val endMin = parseMinutes(endStr).coerceAtLeast(startMin + 45)
+                val startSeconds = startMin * 60
+                val endSeconds = endMin * 60
+
+                val playState: TrackPlayState
+                val progress: Float
+                val remainingMin: Int
+
+                when {
+                    nowSeconds < startSeconds -> {
+                        playState = TrackPlayState.UPCOMING
+                        progress = 0f
+                        remainingMin = (startMin - nowMinutes).coerceAtLeast(1)
+                    }
+                    nowSeconds in startSeconds until endSeconds -> {
+                        playState = TrackPlayState.NOW_PLAYING
+                        val totalSeconds = (endSeconds - startSeconds).coerceAtLeast(1)
+                        progress = ((nowSeconds - startSeconds).toFloat() / totalSeconds.toFloat()).coerceIn(0f, 1f)
+                        remainingMin = (endMin - nowMinutes).coerceAtLeast(1)
+                    }
+                    else -> {
+                        playState = TrackPlayState.COMPLETED
+                        progress = 1f
+                        remainingMin = 0
+                    }
+                }
+
+                TodayTrackUiModel(
+                    trackNumber = idx + 1,
+                    course = course,
+                    startTime = startStr,
+                    endTime = endStr,
+                    playState = playState,
+                    progressFraction = progress,
+                    minutesUntilStartOrEnd = remainingMin
+                )
+            }
+        }
+
+        private fun parseMinutes(hhmm: String): Int {
+            val parts = hhmm.split(":")
+            val h = parts.getOrNull(0)?.toIntOrNull() ?: 8
+            val m = parts.getOrNull(1)?.toIntOrNull() ?: 0
+            return h * 60 + m
+        }
+
         private const val KEY_THEME = "key_artist_theme"
         private const val KEY_CUSTOM_THEME_JSON = "key_custom_theme_json"
         private const val KEY_CUSTOM_THEMES_LIST_JSON = "key_custom_themes_list_json"
@@ -608,6 +774,7 @@ class DataRepository(context: Context) {
         const val SAMPLE_CUSTOM_THEME_ID = "sample_gunjou"
         private const val KEY_SCHEDULE_NAME = "key_schedule_name"
         private const val KEY_CURRENT_WEEK = "key_current_week"
+        private const val KEY_SEMESTER_START_MONDAY = "key_semester_start_monday"
         private const val KEY_TOTAL_WEEKS = "key_total_weeks"
         private const val KEY_MAX_SECTIONS = "key_max_sections"
         private const val KEY_TIME_SLOTS_JSON = "key_time_slots_json"
@@ -615,5 +782,8 @@ class DataRepository(context: Context) {
         private const val KEY_WATCH_BRIDGE = "key_watch_bridge_enabled"
         private const val KEY_LEAD_MINUTES = "key_lead_minutes"
         private const val KEY_UI_STYLE = "key_ui_style"
+        private const val KEY_NOTIFICATION_CARD_STYLE = "key_notification_card_style"
+        private const val KEY_ALARM_CLOCK_PRIORITY = "key_alarm_clock_priority"
+        private const val KEY_DISMISSED_SESSION_KEY = "key_dismissed_session_key"
     }
 }

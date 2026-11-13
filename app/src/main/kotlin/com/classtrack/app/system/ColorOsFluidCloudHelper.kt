@@ -8,6 +8,7 @@ import android.app.PendingIntent
 import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
+import android.content.res.Configuration
 import android.graphics.Bitmap
 import android.graphics.Canvas
 import android.graphics.Paint
@@ -18,16 +19,23 @@ import android.os.Build
 import android.os.Bundle
 import android.os.Handler
 import android.os.Looper
+import android.os.PowerManager
+import android.os.UserManager
 import android.provider.Settings
+import android.widget.RemoteViews
 import androidx.core.app.NotificationCompat
 import com.classtrack.app.MainActivity
 import com.classtrack.app.R
 import com.classtrack.app.data.DataRepository
 import com.classtrack.app.data.model.ArtistTheme
 import com.classtrack.app.data.model.CourseItem
+import com.classtrack.app.data.model.NotificationCardStyle
 import com.classtrack.app.data.model.TodayTrackUiModel
 import com.classtrack.app.data.model.TrackPlayState
+import java.time.LocalDate
+import java.time.LocalDateTime
 import java.util.Locale
+import kotlin.math.roundToInt
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -60,7 +68,7 @@ enum class IslandScrollStage(val label: String) {
 }
 
 /**
- * 通知岛实时预览与状态数据（供设置页同步展示通知岛收回后的滚动效果）
+ * 通知岛实时预览与状态数据（供设置页同步展示流体卡与胶囊效果）
  */
 data class IslandLivePreviewState(
     val isActive: Boolean = false,
@@ -77,14 +85,13 @@ data class IslandLivePreviewState(
 )
 
 /**
- * 全新架构重构：跨平台流体云、实况胶囊与穿戴设备统一调度引擎
+ * 《课轨》流体云、极简点阵流体卡与穿戴设备统一调度引擎
  *
- * 借鉴业界标杆（WakeUp 课程表、CustomizeLiveUpdate、SleepDown 课程表）的优秀工程实践：
- * 1. 【高信息密度胶囊设计】：首帧直接聚焦【时间 + 核心课名】（如 "08:00 高数"），一眼尽览核心要素，彻底告别单字切片与无头信息；
- * 2. 【防系统限流机制】：将轮播间隔设定为 3.5 秒黄金舒适节奏，彻底杜绝高频 notify 撞上 Android 系统底层 Rate-Limiting 导致的通知被丢弃；
- * 3. 【官方流体云规范全面对齐】：严格对齐 ColorOS 14/15/16 官方协议字段（如 capsule.text、shortCriticalText、oplus.notification.capsule.*）；
- * 4. 【OPPO Watch X2 穿戴直连】：针对欢太健康过滤 Ongoing 的特性，设立独立的非 ongoing 高优先级手表通知通道与手腕脉冲双击振动；
- * 5. 【前台保活服务与全场景兜底】：防止退到后台后被 ColorOS 墓碑冷冻，并在任何时间退出均能保证流体云 100% 稳定挂载。
+ * 1. 支持双样式自由切换：
+ *    - `DOT_CARD`（默认）：复刻高精度 28 点横向渐变时间轴、顶行时间+教室粗体聚焦、右侧黑胶角标、底部珊瑚红状态与紧凑「已到教室」胶囊按钮；
+ *    - `LIVE_CAPSULE`：Android 16 原生 ProgressStyle + ColorOS/OriginOS/HyperOS/MagicOS 状态栏实况胶囊（移除笨重左大方块与纸飞机光标）。
+ * 2. 零冻结实时真值渲染：所有唤醒、心跳、前台服务每帧均通过 `DataRepository.resolveActiveOrUpcomingTrack(LocalDateTime.now())` 实时重算，绝不重复推送冻结的旧分钟数。
+ * 3. 与分钟时钟严格对齐：活跃窗口内由硬件级 RTC `:00.150` 秒心跳逐分推进状态与点阵进度，到点自动从「X分钟后上课」切换为「Y分钟后下课」。
  */
 object ColorOsFluidCloudHelper {
 
@@ -97,13 +104,20 @@ object ColorOsFluidCloudHelper {
 
     const val ACTION_DISMISS_FLUID_CLOUD = "com.classtrack.app.ACTION_DISMISS_FLUID_CLOUD"
     const val ACTION_TRIGGER_COURSE_REMINDER = "com.classtrack.app.ACTION_TRIGGER_COURSE_REMINDER"
+    const val ACTION_LIVE_TICK_FLUID_CLOUD = "com.classtrack.app.ACTION_LIVE_TICK_FLUID_CLOUD"
+    const val ACTION_CHECK_ACTIVE_REMINDER = "com.classtrack.app.ACTION_CHECK_ACTIVE_REMINDER"
     const val ACTION_TEST_WATCH_BRIDGE = "com.classtrack.app.ACTION_TEST_WATCH_BRIDGE"
+
+    private const val DOT_COUNT = 28
+    private const val WAKE_LOCK_TAG = "ClassTrack:CourseRtcWakeLock"
 
     private val islandCarouselHandler = Handler(Looper.getMainLooper())
     private var islandCarouselRunnable: Runnable? = null
     private var sessionFixedWhenMs: Long = 0L
-    private var cachedBadgeKey: String = ""
-    private var cachedBadgeBitmap: Bitmap? = null
+    private var cachedVinylKey: String = ""
+    private var cachedVinylBitmap: Bitmap? = null
+    private var cachedTrackerDotKey: String = ""
+    private var cachedTrackerDotBitmap: Bitmap? = null
 
     private val _islandPreviewState = MutableStateFlow(IslandLivePreviewState())
     val islandPreviewState: StateFlow<IslandLivePreviewState> = _islandPreviewState.asStateFlow()
@@ -121,12 +135,21 @@ object ColorOsFluidCloudHelper {
         val detectedOsFamily: LiveCapsuleOsFamily,
         val canPostPromoted: Boolean,
         val hasPromotableCharacteristics: Boolean,
+        val cardStyle: NotificationCardStyle,
         val statusSummary: String
     )
 
-    /**
-     * 自动识别当前手机所属的国产系统家族（ColorOS / OriginOS / HyperOS / MagicOS）
-     */
+    private data class CardPalette(
+        val accentArgb: Int,
+        val headlineArgb: Int,
+        val mutedTextArgb: Int,
+        val statusAccentArgb: Int,
+        val unlitDotArgb: Int,
+        val pillBgResId: Int,
+        val pillTextArgb: Int,
+        val isDarkSurface: Boolean
+    )
+
     fun detectDeviceOsFamily(): LiveCapsuleOsFamily {
         val brand = "${Build.MANUFACTURER} ${Build.BRAND} ${Build.DISPLAY}".lowercase(Locale.ROOT)
         return when {
@@ -155,38 +178,32 @@ object ColorOsFluidCloudHelper {
         (getMethod.invoke(null, key, "") as? String).orEmpty()
     }.getOrDefault("")
 
-    /**
-     * 确保通知渠道合规就绪
-     */
     fun ensureNotificationChannel(context: Context) {
         val manager = context.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
 
-        // 清理旧版媒体通道
         runCatching {
             manager.deleteNotificationChannel(LEGACY_CHANNEL_MEDIA)
             manager.cancel(LEGACY_NOTIFICATION_ID_MEDIA)
         }
 
-        // 1. 手机端实时流体云与状态栏实况胶囊通道 (Ongoing 持续常驻进度通知)
         val liveChannel = NotificationChannel(
             CHANNEL_ID_FLUID_CLOUD,
             "课轨 · 流体云与实况课程进度",
             NotificationManager.IMPORTANCE_HIGH
         ).apply {
-            description = "用于 ColorOS 流体云、OriginOS 原子岛、HyperOS 超级岛、MagicOS 实况窗课程进度与课前提醒"
+            description = "用于实时课程流体卡、ColorOS 流体云、OriginOS 原子岛、HyperOS 超级岛与 MagicOS 实况窗"
             enableVibration(true)
             setShowBadge(true)
             lockscreenVisibility = Notification.VISIBILITY_PUBLIC
         }
         manager.createNotificationChannel(liveChannel)
 
-        // 2. 专属智能手表 / 手环穿戴提醒通道 (特别针对 OPPO Watch X2 / 欢太健康 HeyTap Health 同步)
         val watchChannel = NotificationChannel(
             CHANNEL_ID_WATCH_BRIDGE,
             "课轨 · 智能手表上课提醒 (OPPO Watch / 穿戴设备)",
             NotificationManager.IMPORTANCE_HIGH
         ).apply {
-            description = "专用于向 OPPO Watch X2、ColorOS Watch、Wear OS 及智能手环同步即时上课提醒，支持手腕振动"
+            description = "专用于向 OPPO Watch X2、ColorOS Watch、Wear OS 及智能手环同步即时上课提醒"
             enableVibration(true)
             vibrationPattern = longArrayOf(0, 250, 150, 250)
             setShowBadge(true)
@@ -195,9 +212,6 @@ object ColorOsFluidCloudHelper {
         manager.createNotificationChannel(watchChannel)
     }
 
-    /**
-     * 检查当前设备对实况通知 / 流体云 / 焦点通知的权限状态
-     */
     fun checkPromotedPermission(context: Context): Boolean {
         val manager = context.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
         if (!manager.areNotificationsEnabled()) return false
@@ -220,9 +234,6 @@ object ColorOsFluidCloudHelper {
         }
     }
 
-    /**
-     * 跳转到对应系统的「流体云 / 原子岛 / 焦点通知 / 实况窗」权限设置页
-     */
     fun openSystemFluidCloudSettings(context: Context) {
         val launchedPromotionPage = runCatching {
             val promoIntent = Intent("android.settings.APP_NOTIFICATION_PROMOTION_SETTINGS").apply {
@@ -245,9 +256,106 @@ object ColorOsFluidCloudHelper {
     }
 
     /**
-     * 构建定宽等长、无废话的状态栏实况胶囊帧：
-     * - 彻底剔除无意义的 "@待定教室" 噪音；
-     * - 保持每帧 4~6 字紧凑宽度，消除系统状态栏胶囊因字数忽长忽短引起的伸缩闪烁。
+     * 依据当前实时系统时间解析「正在上课 / 即将上课」并发送或静默更新流体卡 / 实况胶囊，
+     * 同步挂接下一分钟 `:00.150` 秒硬件级 RTC 实时心跳。
+     */
+    fun postOrUpdateActiveLiveReminder(
+        context: Context,
+        isSilentUpdate: Boolean = true,
+        targetCourseId: Long = -1L,
+        allowAnyUpcomingToday: Boolean = false,
+        respectDismissed: Boolean = true,
+        referenceNow: LocalDateTime = LocalDateTime.now()
+    ): FluidCloudDiagnostics? {
+        val appContext = context.applicationContext
+        val repository = DataRepository(appContext)
+        if (!repository.fluidCloudEnabled.value) {
+            cancelFluidCloudNotification(appContext)
+            CourseAlarmScheduler.cancelLiveTick(appContext)
+            return null
+        }
+
+        val activeTrack = repository.resolveActiveOrUpcomingTrack(
+            now = referenceNow,
+            leadMinutes = repository.leadMinutes.value,
+            targetCourseId = targetCourseId,
+            allowAnyUpcomingToday = allowAnyUpcomingToday,
+            respectDismissed = respectDismissed
+        )
+
+        if (activeTrack == null || activeTrack.playState == TrackPlayState.COMPLETED) {
+            cancelFluidCloudNotification(appContext)
+            CourseAlarmScheduler.cancelLiveTick(appContext)
+            return null
+        }
+
+        val sessionKey = repository.buildSessionKey(
+            date = referenceNow.toLocalDate(),
+            courseId = activeTrack.course.id,
+            startSection = activeTrack.course.startSection
+        )
+
+        val diagnostics = postFluidCloudTrackNotification(
+            context = appContext,
+            track = activeTrack,
+            artistTheme = repository.artistTheme.value,
+            watchBridgeEnabled = repository.watchBridgeEnabled.value,
+            cardStyle = repository.notificationCardStyle.value,
+            sessionKey = sessionKey,
+            isSilentUpdate = isSilentUpdate,
+            startLiveUpdates = true
+        )
+
+        // 仅在首次非静默唤醒（课前触发或跨状态主动提醒）时向 OPPO Watch X2 发送腕上脉冲提醒
+        if (!isSilentUpdate && repository.watchBridgeEnabled.value) {
+            postWatchBridgeNotification(appContext, activeTrack, sessionKey)
+        }
+
+        // 确保下一整分钟 :00.150 秒准时推送新一帧
+        CourseAlarmScheduler.scheduleNextMinuteLiveTick(appContext)
+        return diagnostics
+    }
+
+    /**
+     * 当用户退回桌面或切换应用时：仅当当前确实处于上课进行中或课前提醒窗口且未收起时，自动挂载/刷新实况卡片
+     */
+    fun triggerAutoBackgroundFluidCloud(context: Context) {
+        val appContext = context.applicationContext
+        val repository = DataRepository(appContext)
+        if (!repository.fluidCloudEnabled.value) return
+
+        val now = LocalDateTime.now()
+        val activeTrack = repository.resolveActiveOrUpcomingTrack(
+            now = now,
+            leadMinutes = repository.leadMinutes.value,
+            allowAnyUpcomingToday = false,
+            respectDismissed = true
+        )
+        if (activeTrack == null || activeTrack.playState == TrackPlayState.COMPLETED) {
+            return
+        }
+
+        val sessionKey = repository.buildSessionKey(
+            date = now.toLocalDate(),
+            courseId = activeTrack.course.id,
+            startSection = activeTrack.course.startSection
+        )
+
+        postFluidCloudTrackNotification(
+            context = appContext,
+            track = activeTrack,
+            artistTheme = repository.artistTheme.value,
+            watchBridgeEnabled = repository.watchBridgeEnabled.value,
+            cardStyle = repository.notificationCardStyle.value,
+            sessionKey = sessionKey,
+            isSilentUpdate = true,
+            startLiveUpdates = true
+        )
+        CourseAlarmScheduler.scheduleNextMinuteLiveTick(appContext)
+    }
+
+    /**
+     * 构建定宽紧凑的状态栏胶囊单元帧（用于实况胶囊模式的单字/短语展示，不折行）
      */
     fun buildIslandMarqueeFrame(
         courseNameRaw: String,
@@ -258,12 +366,7 @@ object ColorOsFluidCloudHelper {
         playState: TrackPlayState,
         step: Int
     ): IslandCarouselFrame {
-        val cleanCourse = courseNameRaw
-            .replace(Regex("[（\\(][^）\\)]*[）\\)]"), "")
-            .replace(Regex("[【\\[][^】\\]]*[】\\]]"), "")
-            .trim()
-            .ifBlank { courseNameRaw.trim().ifBlank { "当前课程" } }
-
+        val cleanCourse = sanitizeCourseTitle(courseNameRaw)
         val shortCourseName = when {
             cleanCourse.contains("高等数学") -> "高等数学"
             cleanCourse.contains("大学英语") -> "大学英语"
@@ -274,11 +377,11 @@ object ColorOsFluidCloudHelper {
             cleanCourse.contains("思修") -> "思修"
             cleanCourse.contains("计算机网络") -> "计网"
             cleanCourse.length <= 5 -> cleanCourse
-            else -> cleanCourse.take(4)
+            else -> cleanCourse.take(5)
         }
 
-        val rawRoomTrimmed = roomRaw.trim().removePrefix("@").trim()
-        val hasValidRoom = rawRoomTrimmed.isNotBlank() && rawRoomTrimmed != "待定教室"
+        val cleanRoom = sanitizeRoom(roomRaw)
+        val hasValidRoom = isValidRoom(cleanRoom)
         val timeOnly = startTimeRaw.ifBlank { "08:00" }
 
         val countdownText = when (playState) {
@@ -291,7 +394,7 @@ object ColorOsFluidCloudHelper {
         val (stage, unitText, unitTag) = when (unitIndex) {
             0 -> Triple(IslandScrollStage.COURSE_NAME, shortCourseName, "课程")
             1 -> if (hasValidRoom) {
-                Triple(IslandScrollStage.ROOM_LOCATION, rawRoomTrimmed.take(6), "教室")
+                Triple(IslandScrollStage.ROOM_LOCATION, cleanRoom.take(6), "教室")
             } else {
                 Triple(IslandScrollStage.CLASS_TIME, "$timeOnly 上课", "时间")
             }
@@ -299,9 +402,9 @@ object ColorOsFluidCloudHelper {
         }
 
         val fullSummary = if (hasValidRoom) {
-            "$timeOnly · $cleanCourse · $rawRoomTrimmed · $countdownText"
+            "$timeOnly-$endTimeRaw $cleanRoom · $cleanCourse · $countdownText"
         } else {
-            "$timeOnly · $cleanCourse · $countdownText"
+            "$timeOnly-$endTimeRaw · $cleanCourse · $countdownText"
         }
 
         return IslandCarouselFrame(
@@ -309,13 +412,13 @@ object ColorOsFluidCloudHelper {
             shortCriticalText = unitText,
             capsuleLeftTitle = unitTag,
             capsuleRightContent = unitText,
-            subTextBanner = if (hasValidRoom) "$rawRoomTrimmed · $countdownText" else countdownText,
+            subTextBanner = if (hasValidRoom) "$cleanRoom · $countdownText" else countdownText,
             marqueeFullText = fullSummary
         )
     }
 
     /**
-     * 发送或更新跨系统实况通知（原生进度通知，单卡纯净呈现）
+     * 发送或更新课程流体通知（根据用户选择的 `DOT_CARD` 或 `LIVE_CAPSULE` 渲染）
      */
     fun postFluidCloudTrackNotification(
         context: Context,
@@ -324,16 +427,30 @@ object ColorOsFluidCloudHelper {
         watchBridgeEnabled: Boolean,
         preferredOsFamily: LiveCapsuleOsFamily = LiveCapsuleOsFamily.AUTO,
         carouselFrameIndex: Int = 0,
-        isCarouselTick: Boolean = false
+        isCarouselTick: Boolean = false,
+        cardStyle: NotificationCardStyle? = null,
+        sessionKey: String = "",
+        isSilentUpdate: Boolean = isCarouselTick,
+        startLiveUpdates: Boolean = !isCarouselTick
     ): FluidCloudDiagnostics {
         val appContext = context.applicationContext
         ensureNotificationChannel(appContext)
         val manager = appContext.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
+        val repository = DataRepository(appContext)
+        val resolvedStyle = cardStyle ?: repository.notificationCardStyle.value
 
         val effectiveOs = if (preferredOsFamily == LiveCapsuleOsFamily.AUTO) {
             detectDeviceOsFamily()
         } else {
             preferredOsFamily
+        }
+
+        val effectiveSessionKey = sessionKey.ifBlank {
+            repository.buildSessionKey(
+                date = LocalDate.now(),
+                courseId = track.course.id,
+                startSection = track.course.startSection
+            )
         }
 
         val notification = createLiveTrackNotification(
@@ -343,7 +460,9 @@ object ColorOsFluidCloudHelper {
             watchBridgeEnabled = watchBridgeEnabled,
             preferredOsFamily = preferredOsFamily,
             carouselFrameIndex = carouselFrameIndex,
-            isCarouselTick = isCarouselTick
+            isCarouselTick = isSilentUpdate,
+            cardStyle = resolvedStyle,
+            sessionKey = effectiveSessionKey
         )
 
         val minutes = track.minutesUntilStartOrEnd.coerceAtLeast(1)
@@ -358,8 +477,8 @@ object ColorOsFluidCloudHelper {
         )
 
         val progressCurrent = when (track.playState) {
-            TrackPlayState.NOW_PLAYING -> (track.progressFraction * 100).toInt().coerceIn(8, 96)
-            TrackPlayState.UPCOMING -> (100 - minutes.coerceIn(0, 45) * 100 / 45).coerceIn(10, 92)
+            TrackPlayState.NOW_PLAYING -> (track.progressFraction * 100f).roundToInt().coerceIn(2, 99)
+            TrackPlayState.UPCOMING -> 0
             TrackPlayState.COMPLETED -> 100
         }
 
@@ -367,64 +486,75 @@ object ColorOsFluidCloudHelper {
         val hasPromotable = if (Build.VERSION.SDK_INT >= 36) {
             runCatching { notification.hasPromotableCharacteristics() }.getOrDefault(false)
         } else {
-            true
+            resolvedStyle == NotificationCardStyle.LIVE_CAPSULE
         }
 
         try {
             manager.notify(NOTIFICATION_ID_FLUID_TRACK, notification)
         } catch (e: Exception) {
-            android.util.Log.e("ColorOsFluidCloud", "主通知发送失败，启动安全降级通道", e)
+            android.util.Log.e("ColorOsFluidCloud", "通知发送异常，启动标准兼容兜底", e)
             runCatching {
+                val cleanRoom = sanitizeRoom(track.course.room)
+                val headline = if (isValidRoom(cleanRoom)) {
+                    "${track.startTime}-${track.endTime} $cleanRoom"
+                } else {
+                    "${track.startTime}-${track.endTime}"
+                }
                 val fallbackCompat = NotificationCompat.Builder(appContext, CHANNEL_ID_FLUID_CLOUD)
                     .setSmallIcon(R.drawable.ic_stat_schedule)
-                    .setContentTitle(track.course.name)
-                    .setContentText("${track.startTime}-${track.endTime} · ${activeFrame.subTextBanner}")
+                    .setContentTitle(headline)
+                    .setContentText("${sanitizeCourseTitle(track.course.name)} · ${formatCountdownLabel(track.playState, minutes)}")
                     .setOngoing(true)
                     .setOnlyAlertOnce(true)
+                    .setSilent(isSilentUpdate)
                     .setPriority(NotificationCompat.PRIORITY_HIGH)
                     .build()
                 manager.notify(NOTIFICATION_ID_FLUID_TRACK, fallbackCompat)
             }
         }
 
-        // 同步更新应用内预览状态
         _islandPreviewState.value = IslandLivePreviewState(
             isActive = true,
-            stage = if (!isCarouselTick) IslandScrollStage.POPUP_EXPANDED else activeFrame.stage,
+            stage = if (!isSilentUpdate) IslandScrollStage.POPUP_EXPANDED else activeFrame.stage,
             islandCapsuleText = activeFrame.shortCriticalText,
             fullMarqueeText = activeFrame.marqueeFullText,
             scrollOffset = carouselFrameIndex,
             capsuleLeftLabel = activeFrame.capsuleLeftTitle,
             capsuleRightValue = activeFrame.capsuleRightContent,
-            fullCourseName = track.course.name,
-            roomName = track.course.room,
+            fullCourseName = sanitizeCourseTitle(track.course.name),
+            roomName = sanitizeRoom(track.course.room),
             timeRange = "${track.startTime}-${track.endTime}",
             progressPercent = progressCurrent
         )
 
-        // 首次触发时启动状态栏胶囊 4.0s 定宽轮播
-        if (!isCarouselTick) {
-            startIslandCarousel(
+        // 仅在「状态栏实况胶囊」模式按需开启实时动态轮播；「极简点阵流体卡」依靠硬件 RTC 整分钟心跳即可，零多余唤醒
+        if (startLiveUpdates && resolvedStyle == NotificationCardStyle.LIVE_CAPSULE) {
+            startLiveCapsuleLoop(
                 context = appContext,
-                track = track,
-                artistTheme = artistTheme,
-                watchBridgeEnabled = watchBridgeEnabled,
                 preferredOsFamily = preferredOsFamily
             )
+        } else if (resolvedStyle == NotificationCardStyle.DOT_CARD) {
+            stopIslandCarousel(resetPreview = false)
+            FluidCloudForegroundService.stopCarousel(appContext)
+        }
+
+        val summary = when (resolvedStyle) {
+            NotificationCardStyle.DOT_CARD -> "已推送极简点阵流体卡 (${track.course.name})"
+            NotificationCardStyle.LIVE_CAPSULE -> "已推送 ${effectiveOs.displayName} ${effectiveOs.featureName}"
         }
 
         return FluidCloudDiagnostics(
             detectedOsFamily = effectiveOs,
             canPostPromoted = canPostPromoted,
             hasPromotableCharacteristics = hasPromotable,
-            statusSummary = "已推送 ${effectiveOs.displayName} ${effectiveOs.featureName}"
+            cardStyle = resolvedStyle,
+            statusSummary = summary
         )
     }
 
     /**
-     * 构建跨系统实况通知对象（单行标题 + 单行精炼副标题 + 纯净进度条 + 静态高清日程徽章）
+     * 构建通知实例：依据 `cardStyle` 自动分流渲染高颜值 `DOT_CARD` 或 `LIVE_CAPSULE`
      */
-    @Suppress("DEPRECATION")
     fun createLiveTrackNotification(
         context: Context,
         track: TodayTrackUiModel,
@@ -432,7 +562,9 @@ object ColorOsFluidCloudHelper {
         watchBridgeEnabled: Boolean,
         preferredOsFamily: LiveCapsuleOsFamily = LiveCapsuleOsFamily.AUTO,
         carouselFrameIndex: Int = 0,
-        isCarouselTick: Boolean = false
+        isCarouselTick: Boolean = false,
+        cardStyle: NotificationCardStyle = DataRepository(context.applicationContext).notificationCardStyle.value,
+        sessionKey: String = ""
     ): Notification {
         val appContext = context.applicationContext
         ensureNotificationChannel(appContext)
@@ -453,6 +585,9 @@ object ColorOsFluidCloudHelper {
 
         val dismissIntent = Intent(appContext, CourseReminderReceiver::class.java).apply {
             action = ACTION_DISMISS_FLUID_CLOUD
+            if (sessionKey.isNotBlank()) {
+                putExtra(CourseAlarmScheduler.EXTRA_SESSION_KEY, sessionKey)
+            }
         }
         val dismissPendingIntent = PendingIntent.getBroadcast(
             appContext,
@@ -461,96 +596,221 @@ object ColorOsFluidCloudHelper {
             PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
         )
 
+        return if (cardStyle == NotificationCardStyle.DOT_CARD) {
+            buildDotCardNotification(
+                appContext = appContext,
+                track = track,
+                artistTheme = artistTheme,
+                watchBridgeEnabled = watchBridgeEnabled,
+                isSilentUpdate = isCarouselTick,
+                contentPendingIntent = contentPendingIntent,
+                dismissPendingIntent = dismissPendingIntent
+            )
+        } else {
+            buildLiveCapsuleNotification(
+                appContext = appContext,
+                track = track,
+                artistTheme = artistTheme,
+                watchBridgeEnabled = watchBridgeEnabled,
+                carouselFrameIndex = carouselFrameIndex,
+                isSilentUpdate = isCarouselTick,
+                contentPendingIntent = contentPendingIntent,
+                dismissPendingIntent = dismissPendingIntent
+            )
+        }
+    }
+
+    /**
+     * 样式一：极简点阵流体卡 (DOT_CARD) —— 默认首选
+     * 复刻顶尖流体卡片美学：
+     * - 顶行左对齐粗体 `18:30-20:05 · 二教208`，右上角 28dp 《课轨》黑胶小标，无笨重左方框
+     * - 次行低饱和纯净课名 + 节次
+     * - 中部 28 枚高精圆点水平时间轴：课前全灰静默等待，开课后从左至右逐分点亮
+     * - 底行左侧高辨识度珊瑚红/主题色实时状态，右侧紧凑胶囊按钮「已到教室」
+     */
+    private fun buildDotCardNotification(
+        appContext: Context,
+        track: TodayTrackUiModel,
+        artistTheme: ArtistTheme,
+        watchBridgeEnabled: Boolean,
+        isSilentUpdate: Boolean,
+        contentPendingIntent: PendingIntent,
+        dismissPendingIntent: PendingIntent
+    ): Notification {
+        val palette = resolveCardPalette(appContext, artistTheme)
+        val cleanCourse = sanitizeCourseTitle(track.course.name)
+        val cleanRoom = sanitizeRoom(track.course.room)
+        val hasValidRoom = isValidRoom(cleanRoom)
         val minutes = track.minutesUntilStartOrEnd.coerceAtLeast(1)
-        val statusPrefix = when (track.playState) {
-            TrackPlayState.NOW_PLAYING -> "剩余${minutes}分钟下课"
-            TrackPlayState.UPCOMING -> "${minutes}分钟后上课"
-            TrackPlayState.COMPLETED -> "本节已结束"
+
+        val headlineText = if (hasValidRoom) {
+            "${track.startTime}-${track.endTime}  $cleanRoom"
+        } else {
+            "${track.startTime}-${track.endTime}"
+        }
+        val courseSubtitle = "$cleanCourse · ${track.course.sectionRangeText()}"
+        val countdownLabel = formatCountdownLabel(track.playState, minutes)
+
+        val vinylBitmap = getOrCreateVinylBadgeBitmap(
+            accentColor = palette.accentArgb,
+            isDarkSurface = palette.isDarkSurface
+        )
+        val dotsBitmap = renderDotTimelineBitmap(
+            playState = track.playState,
+            progressFraction = track.progressFraction,
+            litColor = palette.statusAccentArgb,
+            unlitColor = palette.unlitDotArgb
+        )
+
+        val expandedViews = RemoteViews(appContext.packageName, R.layout.notification_fluid_course_expanded).apply {
+            setTextViewText(R.id.notif_time_room, headlineText)
+            setTextColor(R.id.notif_time_room, palette.headlineArgb)
+            setImageViewBitmap(R.id.notif_brand_badge, vinylBitmap)
+
+            setTextViewText(R.id.notif_course_name, courseSubtitle)
+            setTextColor(R.id.notif_course_name, palette.mutedTextArgb)
+
+            setImageViewBitmap(R.id.notif_dot_timeline, dotsBitmap)
+
+            setTextViewText(R.id.notif_status_countdown, countdownLabel)
+            setTextColor(R.id.notif_status_countdown, palette.statusAccentArgb)
+
+            setTextViewText(R.id.notif_action_dismiss, "已到教室")
+            setTextColor(R.id.notif_action_dismiss, palette.pillTextArgb)
+            setInt(R.id.notif_action_dismiss, "setBackgroundResource", palette.pillBgResId)
+            setOnClickPendingIntent(R.id.notif_action_dismiss, dismissPendingIntent)
         }
 
+        val compactViews = RemoteViews(appContext.packageName, R.layout.notification_fluid_course_compact).apply {
+            setTextViewText(R.id.notif_compact_time_room, headlineText)
+            setTextColor(R.id.notif_compact_time_room, palette.headlineArgb)
+
+            setTextViewText(R.id.notif_compact_course, cleanCourse)
+            setTextColor(R.id.notif_compact_course, palette.mutedTextArgb)
+
+            setTextViewText(R.id.notif_compact_status, countdownLabel)
+            setTextColor(R.id.notif_compact_status, palette.statusAccentArgb)
+
+            setTextViewText(R.id.notif_compact_dismiss, "已到教室")
+            setTextColor(R.id.notif_compact_dismiss, palette.pillTextArgb)
+            setInt(R.id.notif_compact_dismiss, "setBackgroundResource", palette.pillBgResId)
+            setOnClickPendingIntent(R.id.notif_compact_dismiss, dismissPendingIntent)
+
+            setImageViewBitmap(R.id.notif_compact_badge, vinylBitmap)
+        }
+
+        val builder = NotificationCompat.Builder(appContext, CHANNEL_ID_FLUID_CLOUD)
+            .setSmallIcon(R.drawable.ic_stat_schedule)
+            .setColor(palette.statusAccentArgb)
+            .setContentTitle(headlineText)
+            .setContentText("$cleanCourse · $countdownLabel")
+            .setCustomContentView(compactViews)
+            .setCustomBigContentView(expandedViews)
+            .setCustomHeadsUpContentView(expandedViews)
+            .setOngoing(true)
+            .setOnlyAlertOnce(isSilentUpdate)
+            .setSilent(isSilentUpdate)
+            .setCategory(NotificationCompat.CATEGORY_REMINDER)
+            .setPriority(NotificationCompat.PRIORITY_HIGH)
+            .setVisibility(NotificationCompat.VISIBILITY_PUBLIC)
+            .setWhen(sessionFixedWhenMs)
+            .setShowWhen(false)
+            .setContentIntent(contentPendingIntent)
+
+        if (!isSilentUpdate && watchBridgeEnabled) {
+            builder.setVibrate(longArrayOf(0, 160, 90, 160))
+        }
+
+        return builder.build().apply {
+            flags = flags or Notification.FLAG_ONGOING_EVENT
+            if (isSilentUpdate) {
+                flags = flags or Notification.FLAG_ONLY_ALERT_ONCE
+            }
+        }
+    }
+
+    /**
+     * 样式二：Android 16 状态栏实况胶囊 (LIVE_CAPSULE)
+     * 彻底修复旧版 3 大丑陋痛点：
+     * 1. 移除 `setLargeIcon(badgeBitmap)` 左大方块，主标题与副标题单行流畅舒展不换行；
+     * 2. 使用极简发光圆点 `setProgressTrackerIcon` 覆盖系统默认导航纸飞机箭头；
+     * 3. 课前阶段进度设为 0，不再误显示 87% 已满。
+     */
+    @Suppress("DEPRECATION")
+    private fun buildLiveCapsuleNotification(
+        appContext: Context,
+        track: TodayTrackUiModel,
+        artistTheme: ArtistTheme,
+        watchBridgeEnabled: Boolean,
+        carouselFrameIndex: Int,
+        isSilentUpdate: Boolean,
+        contentPendingIntent: PendingIntent,
+        dismissPendingIntent: PendingIntent
+    ): Notification {
+        val palette = resolveCardPalette(appContext, artistTheme)
+        val cleanCourse = sanitizeCourseTitle(track.course.name)
+        val cleanRoom = sanitizeRoom(track.course.room)
+        val hasValidRoom = isValidRoom(cleanRoom)
+        val minutes = track.minutesUntilStartOrEnd.coerceAtLeast(1)
+
         val activeFrame = buildIslandMarqueeFrame(
-            courseNameRaw = track.course.name,
-            roomRaw = track.course.room,
+            courseNameRaw = cleanCourse,
+            roomRaw = cleanRoom,
             startTimeRaw = track.startTime,
             endTimeRaw = track.endTime,
             minutes = minutes,
             playState = track.playState,
             step = carouselFrameIndex
         )
-
         val capsuleShortText = activeFrame.shortCriticalText
-        val cleanRoom = track.course.room.trim().removePrefix("@").trim()
-        val hasValidRoom = cleanRoom.isNotBlank() && cleanRoom != "待定教室"
+        val countdownLabel = formatCountdownLabel(track.playState, minutes)
 
-        // 卡片主标题：仅展示纯净课程名称，绝不拼接“· 待定教室”导致折行
-        val titleText = track.course.name.trim().ifBlank { "当前课程" }
-        // 卡片副标题：单行呈现核心时间、有效教室与状态，彻底告别三倍重复堆砌
-        val subtitleText = if (hasValidRoom) {
-            "$cleanRoom · ${track.startTime}-${track.endTime} · $statusPrefix"
+        // 主标题放核心时间地点，副标题单行呈现课名+倒计时，彻底杜绝折行
+        val titleText = if (hasValidRoom) {
+            "${track.startTime}-${track.endTime} · $cleanRoom"
         } else {
-            "${track.startTime}-${track.endTime} (${track.course.sectionRangeText()}) · $statusPrefix"
+            "${track.startTime}-${track.endTime} · ${track.course.sectionRangeText()}"
+        }
+        val subtitleText = "$cleanCourse · $countdownLabel"
+
+        val accentHex = String.format("#%06X", 0xFFFFFF and palette.statusAccentArgb)
+        val (progressValue, elapsedSegmentLen, remainingSegmentLen) = when (track.playState) {
+            TrackPlayState.NOW_PLAYING -> {
+                val p = (track.progressFraction * 100f).roundToInt().coerceIn(2, 98)
+                Triple(p, p, 100 - p)
+            }
+            TrackPlayState.UPCOMING -> Triple(0, 1, 99)
+            TrackPlayState.COMPLETED -> Triple(100, 100, 1)
+        }
+        val reachedSegmentColor = if (track.playState == TrackPlayState.UPCOMING) {
+            palette.unlitDotArgb
+        } else {
+            palette.statusAccentArgb
         }
 
-        val themeAccentArgb = when (artistTheme) {
-            ArtistTheme.ZTMY -> 0xFF38BDF8.toInt()
-            ArtistTheme.YORUSHIKA -> 0xFF38BDF8.toInt()
-            ArtistTheme.FUJII_KAZE -> 0xFFF59E0B.toInt()
-            ArtistTheme.JAY_CHOU -> 0xFFD97706.toInt()
-            ArtistTheme.DAVID_TAO -> 0xFFFF6B1A.toInt()
-            ArtistTheme.TAYLOR_SWIFT -> 0xFFF472B6.toInt()
-            ArtistTheme.AESPA -> 0xFFC084FC.toInt()
-            ArtistTheme.CUSTOM_JSON -> 0xFF38BDF8.toInt()
-        }
-        val themeSecondaryArgb = when (artistTheme) {
-            ArtistTheme.ZTMY -> 0xFF1E3A8A.toInt()
-            ArtistTheme.YORUSHIKA -> 0xFF1E3A8A.toInt()
-            ArtistTheme.FUJII_KAZE -> 0xFF78350F.toInt()
-            ArtistTheme.JAY_CHOU -> 0xFF78350F.toInt()
-            ArtistTheme.DAVID_TAO -> 0xFF7C2D12.toInt()
-            ArtistTheme.TAYLOR_SWIFT -> 0xFF4C1D95.toInt()
-            ArtistTheme.AESPA -> 0xFF3B0764.toInt()
-            ArtistTheme.CUSTOM_JSON -> 0xFF1E3A8A.toInt()
-        }
-        val accentHex = String.format("#%06X", 0xFFFFFF and themeAccentArgb)
-
-        val progressCurrent = when (track.playState) {
-            TrackPlayState.NOW_PLAYING -> (track.progressFraction * 100).toInt().coerceIn(8, 96)
-            TrackPlayState.UPCOMING -> (100 - minutes.coerceIn(0, 45) * 100 / 45).coerceIn(10, 92)
-            TrackPlayState.COMPLETED -> 100
-        }
-
-        // 左侧徽章固定显示节次与开课时间，并缓存复用 Bitmap，彻底消除轮播重绘导致的文字截断与状态栏闪烁
-        val sectionBadgeLabel = "%02d-%02d节".format(track.course.startSection, track.course.endSection)
-        val badgeTimeLabel = track.startTime.ifBlank { "08:00" }
-        val badgeBitmap = getOrCreateScheduleBadgeBitmap(
-            topText = sectionBadgeLabel,
-            bottomText = badgeTimeLabel,
-            primaryColor = themeAccentArgb,
-            secondaryColor = themeSecondaryArgb
+        val vinylBitmap = getOrCreateVinylBadgeBitmap(
+            accentColor = palette.accentArgb,
+            isDarkSurface = palette.isDarkSurface
         )
+        val trackerDotBitmap = getOrCreateProgressTrackerDotBitmap(palette.statusAccentArgb)
 
-        // 1. OPPO / OnePlus ColorOS 流体云 JSON
         val oppoIntelligentIntentJson = buildOppoIntelligentIntentJson(
             track = track,
             activeFrame = activeFrame,
             capsuleShortText = capsuleShortText,
             titleText = titleText,
             subtitleText = subtitleText,
-            progress = progressCurrent,
+            progress = progressValue,
             accentHex = accentHex
         )
-
-        // 2. vivo / iQOO OriginOS 原子岛 JSON
         val originOsIslandJson = buildOriginOsAtomicIslandJson(
-            shortRoom = if (hasValidRoom) cleanRoom.take(5) else badgeTimeLabel,
+            shortRoom = if (hasValidRoom) cleanRoom.take(5) else track.startTime,
             activeFrame = activeFrame,
             titleText = titleText,
             subtitleText = subtitleText,
-            progress = progressCurrent,
+            progress = progressValue,
             accentHex = accentHex
         )
-
-        // 3. 小米 / Redmi HyperOS 澎湃超级岛 & 焦点通知 JSON
         val hyperOsFocusJson = buildHyperOsFocusParamJson(
             track = track,
             minutes = minutes,
@@ -558,22 +818,17 @@ object ColorOsFluidCloudHelper {
             capsuleShortText = capsuleShortText,
             titleText = titleText,
             subtitleText = subtitleText,
-            progress = progressCurrent,
+            progress = progressValue,
             accentHex = accentHex,
-            isCarouselTick = isCarouselTick
+            isCarouselTick = isSilentUpdate
         )
-
-        // 4. 荣耀 MagicOS 灵动胶囊 & 实况窗 JSON
-        val magicOsCapsuleJson = buildMagicOsCapsuleJson(
-            activeFrame = activeFrame,
-            accentHex = accentHex
-        )
+        val magicOsCapsuleJson = buildMagicOsCapsuleJson(activeFrame, accentHex)
         val magicOsLiveViewJson = buildMagicOsLiveViewJson(
             activeFrame = activeFrame,
             capsuleShortText = capsuleShortText,
             titleText = titleText,
             subtitleText = subtitleText,
-            progress = progressCurrent,
+            progress = progressValue,
             accentHex = accentHex
         )
 
@@ -593,19 +848,19 @@ object ColorOsFluidCloudHelper {
             putString("oplus.notification.card.title", titleText)
             putString("oplus.notification.card.subtitle", subtitleText)
 
-            putInt("notification.superx.operation", if (isCarouselTick) 1 else 0)
-            putInt("operation", if (isCarouselTick) 1 else 0)
+            putInt("notification.superx.operation", if (isSilentUpdate) 1 else 0)
+            putInt("operation", if (isSilentUpdate) 1 else 0)
             putBoolean("vivo.originos.island.enable", true)
-            putInt("vivo.originos.island.operation", if (isCarouselTick) 1 else 0)
+            putInt("vivo.originos.island.operation", if (isSilentUpdate) 1 else 0)
             putString("vivo.originos.capsule.title", activeFrame.capsuleLeftTitle)
             putString("vivo.originos.capsule.content", activeFrame.capsuleRightContent)
-            putInt("vivo.originos.island.progress", progressCurrent)
+            putInt("vivo.originos.island.progress", progressValue)
             putString("com.vivo.abe.island.param", originOsIslandJson)
 
             putString("miui.focus.param", hyperOsFocusJson)
             putString("miui.focus.ticker", activeFrame.marqueeFullText)
             val focusPics = Bundle().apply {
-                val icon = Icon.createWithBitmap(badgeBitmap)
+                val icon = Icon.createWithBitmap(vinylBitmap)
                 putParcelable("miui.focus.pic_ticker", icon)
                 putParcelable("miui.focus.pic_small", icon)
                 putParcelable("miui.focus.pic_imageText", icon)
@@ -613,50 +868,49 @@ object ColorOsFluidCloudHelper {
             }
             putBundle("miui.focus.pics", focusPics)
 
-            putInt("notification.live.operation", if (isCarouselTick) 1 else 0)
+            putInt("notification.live.operation", if (isSilentUpdate) 1 else 0)
             putString("notification.live.event", "SCHEDULE")
             putInt("notification.live.type", 3)
             putCharSequence("notification.live.titleOverlay", titleText)
             putCharSequence("notification.live.contentOverlay", subtitleText)
-            putInt("notification.live.progress", progressCurrent)
+            putInt("notification.live.progress", progressValue)
             putString("notification.live.capsule", magicOsCapsuleJson)
             putString("com.hihonor.notification.live_view", magicOsLiveViewJson)
         }
 
         return if (Build.VERSION.SDK_INT >= 36) {
-            // 移除 addProgressPoint，彻底消除 ColorOS 进度条上突兀的纸飞机导航箭头
             val progressStyle = Notification.ProgressStyle()
-                .setStyledByProgress(true)
-                .setProgress(progressCurrent)
+                .setStyledByProgress(false)
+                .setProgress(progressValue)
+                .setProgressTrackerIcon(Icon.createWithBitmap(trackerDotBitmap))
                 .addProgressSegment(
-                    Notification.ProgressStyle.Segment(progressCurrent.coerceIn(1, 99))
-                        .setColor(themeAccentArgb)
+                    Notification.ProgressStyle.Segment(elapsedSegmentLen.coerceAtLeast(1))
+                        .setColor(reachedSegmentColor)
                         .setId(1)
                 )
                 .addProgressSegment(
-                    Notification.ProgressStyle.Segment((100 - progressCurrent).coerceIn(1, 99))
-                        .setColor(0xFF334155.toInt())
+                    Notification.ProgressStyle.Segment(remainingSegmentLen.coerceAtLeast(1))
+                        .setColor(palette.unlitDotArgb)
                         .setId(2)
                 )
 
             val nativeAction = Notification.Action.Builder(
                 Icon.createWithResource(appContext, R.drawable.ic_stat_schedule),
-                "已到教室 · 收起提醒",
+                "已到教室",
                 dismissPendingIntent
             ).build()
 
             val nativeBuilder = Notification.Builder(appContext, CHANNEL_ID_FLUID_CLOUD)
                 .setSmallIcon(R.drawable.ic_stat_schedule)
-                .setLargeIcon(badgeBitmap)
                 .setContentTitle(titleText)
                 .setContentText(subtitleText)
                 .setShortCriticalText(capsuleShortText)
                 .setStyle(progressStyle)
                 .setOngoing(true)
-                .setOnlyAlertOnce(true)
+                .setOnlyAlertOnce(isSilentUpdate)
                 .setGroupSummary(false)
                 .setColorized(false)
-                .setColor(themeAccentArgb)
+                .setColor(palette.statusAccentArgb)
                 .setCategory(Notification.CATEGORY_PROGRESS)
                 .setVisibility(Notification.VISIBILITY_PUBLIC)
                 .setWhen(sessionFixedWhenMs)
@@ -666,139 +920,108 @@ object ColorOsFluidCloudHelper {
                 .addExtras(fluidExtras)
                 .addAction(nativeAction)
 
-            if (watchBridgeEnabled && !isCarouselTick) {
-                nativeBuilder.setVibrate(longArrayOf(0, 180, 100, 180))
+            if (!isSilentUpdate && watchBridgeEnabled) {
+                nativeBuilder.setVibrate(longArrayOf(0, 160, 90, 160))
             }
 
             nativeBuilder.build().apply {
                 flags = flags or
                     Notification.FLAG_ONGOING_EVENT or
-                    Notification.FLAG_PROMOTED_ONGOING or
-                    Notification.FLAG_ONLY_ALERT_ONCE
+                    Notification.FLAG_PROMOTED_ONGOING
+                if (isSilentUpdate) {
+                    flags = flags or Notification.FLAG_ONLY_ALERT_ONCE
+                }
             }
         } else {
             val compatBuilder = NotificationCompat.Builder(appContext, CHANNEL_ID_FLUID_CLOUD)
                 .setSmallIcon(R.drawable.ic_stat_schedule)
-                .setLargeIcon(badgeBitmap)
                 .setContentTitle(titleText)
                 .setContentText(subtitleText)
                 .setTicker(activeFrame.marqueeFullText)
                 .setOngoing(true)
-                .setOnlyAlertOnce(true)
+                .setOnlyAlertOnce(isSilentUpdate)
+                .setSilent(isSilentUpdate)
                 .setCategory(NotificationCompat.CATEGORY_PROGRESS)
                 .setPriority(NotificationCompat.PRIORITY_HIGH)
                 .setVisibility(NotificationCompat.VISIBILITY_PUBLIC)
-                .setColor(themeAccentArgb)
+                .setColor(palette.statusAccentArgb)
                 .setColorized(false)
                 .setWhen(sessionFixedWhenMs)
                 .setShowWhen(false)
                 .setUsesChronometer(false)
-                .setProgress(100, progressCurrent, false)
+                .setProgress(100, progressValue, false)
                 .setContentIntent(contentPendingIntent)
                 .addExtras(fluidExtras)
                 .addAction(
                     R.drawable.ic_stat_schedule,
-                    "已到教室 · 收起提醒",
+                    "已到教室",
                     dismissPendingIntent
                 )
 
-            if (watchBridgeEnabled && !isCarouselTick) {
-                compatBuilder.setVibrate(longArrayOf(0, 180, 100, 180))
+            if (!isSilentUpdate && watchBridgeEnabled) {
+                compatBuilder.setVibrate(longArrayOf(0, 160, 90, 160))
                 val wearAction = NotificationCompat.Action.Builder(
                     R.drawable.ic_stat_schedule,
                     "已到教室",
                     dismissPendingIntent
                 ).build()
-                val wearableExtender = NotificationCompat.WearableExtender()
-                    .addAction(wearAction)
-                compatBuilder.extend(wearableExtender)
+                compatBuilder.extend(NotificationCompat.WearableExtender().addAction(wearAction))
             }
 
             compatBuilder.build().apply {
-                flags = flags or
-                    Notification.FLAG_ONGOING_EVENT or
-                    Notification.FLAG_ONLY_ALERT_ONCE
+                flags = flags or Notification.FLAG_ONGOING_EVENT
+                if (isSilentUpdate) {
+                    flags = flags or Notification.FLAG_ONLY_ALERT_ONCE
+                }
             }
         }
     }
 
     /**
-     * 启动通知岛收回后的定宽单元轮播器（4.0 秒稳定节奏，静态复用图标不闪烁）
+     * 实况胶囊状态栏轮播循环（每轮均重新从 DataRepository 计算实时系统时间状态，彻底杜绝冻帧）
      */
-    private fun startIslandCarousel(
+    private fun startLiveCapsuleLoop(
         context: Context,
-        track: TodayTrackUiModel,
-        artistTheme: ArtistTheme,
-        watchBridgeEnabled: Boolean,
         preferredOsFamily: LiveCapsuleOsFamily
     ) {
         stopIslandCarousel(resetPreview = false)
-
         FluidCloudForegroundService.startCarousel(context)
 
         var step = 1
         val runnable = object : Runnable {
             override fun run() {
-                if (step > 600) return
-                postFluidCloudTrackNotification(
-                    context = context,
-                    track = track,
-                    artistTheme = artistTheme,
-                    watchBridgeEnabled = watchBridgeEnabled,
-                    preferredOsFamily = preferredOsFamily,
-                    carouselFrameIndex = step,
-                    isCarouselTick = true
+                if (step > 360) return
+                val repository = DataRepository(context)
+                if (!repository.fluidCloudEnabled.value ||
+                    repository.notificationCardStyle.value != NotificationCardStyle.LIVE_CAPSULE
+                ) {
+                    return
+                }
+                val liveTrack = repository.resolveActiveOrUpcomingTrack(
+                    now = LocalDateTime.now(),
+                    leadMinutes = repository.leadMinutes.value,
+                    respectDismissed = true
                 )
-                step++
-                islandCarouselHandler.postDelayed(this, 4000L)
+                if (liveTrack != null && liveTrack.playState != TrackPlayState.COMPLETED) {
+                    postFluidCloudTrackNotification(
+                        context = context,
+                        track = liveTrack,
+                        artistTheme = repository.artistTheme.value,
+                        watchBridgeEnabled = repository.watchBridgeEnabled.value,
+                        preferredOsFamily = preferredOsFamily,
+                        carouselFrameIndex = step,
+                        isCarouselTick = true,
+                        cardStyle = NotificationCardStyle.LIVE_CAPSULE,
+                        isSilentUpdate = true,
+                        startLiveUpdates = false
+                    )
+                    step++
+                    islandCarouselHandler.postDelayed(this, 4500L)
+                }
             }
         }
         islandCarouselRunnable = runnable
-        islandCarouselHandler.postDelayed(runnable, 2500L)
-    }
-
-    /**
-     * 当退出应用或退到后台时自动触发流体云实况跑马灯
-     */
-    fun triggerAutoBackgroundFluidCloud(context: Context) {
-        val appContext = context.applicationContext
-        val repository = DataRepository(appContext)
-        if (!repository.fluidCloudEnabled.value) return
-
-        val tracks = repository.buildTracksForDay(
-            dayOfWeek = repository.selectedDayOfWeek.value,
-            week = repository.currentWeek.value
-        )
-        // 智能取课策略：优先取正在上课的课程，其次即将上课的课程；
-        // 若当前不在上课时段（如课后、晚上或未上课），取当天最近或首门课程；若当天未安排，生成示范课程，确保无论何时退出测试流体云 100% 弹出展示
-        val targetTrack = tracks.firstOrNull { it.playState == TrackPlayState.NOW_PLAYING }
-            ?: tracks.firstOrNull { it.playState == TrackPlayState.UPCOMING }
-            ?: tracks.firstOrNull()
-            ?: TodayTrackUiModel(
-                trackNumber = 1,
-                course = CourseItem(
-                    name = "高等数学",
-                    room = "二教 209",
-                    teacher = "任课教师",
-                    dayOfWeek = repository.selectedDayOfWeek.value,
-                    startSection = 1,
-                    endSection = 2
-                ),
-                startTime = "08:00",
-                endTime = "09:35",
-                playState = TrackPlayState.UPCOMING,
-                progressFraction = 0.35f,
-                minutesUntilStartOrEnd = 15
-            )
-
-        postFluidCloudTrackNotification(
-            context = appContext,
-            track = targetTrack.copy(
-                minutesUntilStartOrEnd = targetTrack.minutesUntilStartOrEnd.takeIf { it > 0 } ?: 15
-            ),
-            artistTheme = repository.artistTheme.value,
-            watchBridgeEnabled = repository.watchBridgeEnabled.value
-        )
+        islandCarouselHandler.postDelayed(runnable, 3000L)
     }
 
     private fun stopIslandCarousel(resetPreview: Boolean = true) {
@@ -810,63 +1033,203 @@ object ColorOsFluidCloudHelper {
     }
 
     /**
-     * 绘制并缓存高颜值静态日程时间徽章：
-     * 上方显示节次（如 01-02节），下方显示开课时间（如 08:50），字号精准适配绝不截断，且在轮播期间复用同一 Bitmap 实例避免状态栏闪烁
+     * 绘制 28 点高精度横向渐进时间轴 Bitmap（课前 0 点点亮，开课后从左至右逐分点亮，末端带柔和微光）
      */
-    private fun getOrCreateScheduleBadgeBitmap(
-        topText: String,
-        bottomText: String,
-        primaryColor: Int,
-        secondaryColor: Int
+    private fun renderDotTimelineBitmap(
+        playState: TrackPlayState,
+        progressFraction: Float,
+        litColor: Int,
+        unlitColor: Int
     ): Bitmap {
-        val cacheKey = "${topText}_${bottomText}_${primaryColor}_$secondaryColor"
-        cachedBadgeBitmap?.let { existing ->
-            if (cachedBadgeKey == cacheKey && !existing.isRecycled) {
-                return existing
-            }
+        val width = 900
+        val height = 30
+        val bmp = Bitmap.createBitmap(width, height, Bitmap.Config.ARGB_8888)
+        val canvas = Canvas(bmp)
+        val paint = Paint(Paint.ANTI_ALIAS_FLAG).apply { style = Paint.Style.FILL }
+
+        val litCount = when (playState) {
+            TrackPlayState.UPCOMING -> 0
+            TrackPlayState.NOW_PLAYING -> (progressFraction.coerceIn(0f, 1f) * DOT_COUNT)
+                .roundToInt()
+                .coerceIn(1, DOT_COUNT)
+            TrackPlayState.COMPLETED -> DOT_COUNT
         }
 
-        val size = 192
-        val bmp = Bitmap.createBitmap(size, size, Bitmap.Config.ARGB_8888)
-        val canvas = Canvas(bmp)
-        val paint = Paint(Paint.ANTI_ALIAS_FLAG)
+        val marginX = 14f
+        val cy = height / 2f
+        val dotRadius = 8.4f
+        val stepX = (width - marginX * 2f) / (DOT_COUNT - 1).coerceAtLeast(1)
 
-        // 深邃圆角底板
-        paint.style = Paint.Style.FILL
-        paint.color = 0xFF0F172A.toInt()
-        canvas.drawRoundRect(RectF(0f, 0f, size.toFloat(), size.toFloat()), 44f, 44f, paint)
-
-        // 顶部柔和主题色药丸条
-        paint.color = secondaryColor
-        canvas.drawRoundRect(RectF(18f, 18f, size - 18f, 74f), 24f, 24f, paint)
-
-        // 精细内描边
-        paint.style = Paint.Style.STROKE
-        paint.strokeWidth = 4f
-        paint.color = primaryColor
-        canvas.drawRoundRect(RectF(6f, 6f, size - 6f, size - 6f), 40f, 40f, paint)
-
-        // 顶部节次文字（如 "01-02节"）
-        paint.style = Paint.Style.FILL
-        paint.color = 0xFFFFFFFF.toInt()
-        paint.textAlign = Paint.Align.CENTER
-        paint.textSize = 26f
-        paint.isFakeBoldText = true
-        canvas.drawText(topText.take(6), size / 2f, 55f, paint)
-
-        // 下方大字号开课时间（如 "08:50"）
-        paint.color = primaryColor
-        paint.textSize = 42f
-        canvas.drawText(bottomText.take(5), size / 2f, 142f, paint)
-
-        cachedBadgeKey = cacheKey
-        cachedBadgeBitmap = bmp
+        val haloColor = (litColor and 0x00FFFFFF) or (0x4D shl 24)
+        for (i in 0 until DOT_COUNT) {
+            val cx = marginX + i * stepX
+            if (i < litCount) {
+                if (i == litCount - 1 && playState == TrackPlayState.NOW_PLAYING) {
+                    paint.color = haloColor
+                    canvas.drawCircle(cx, cy, dotRadius * 1.48f, paint)
+                }
+                paint.color = litColor
+                canvas.drawCircle(cx, cy, dotRadius, paint)
+            } else {
+                paint.color = unlitColor
+                canvas.drawCircle(cx, cy, dotRadius * 0.92f, paint)
+            }
+        }
         return bmp
     }
 
     /**
-     * 1. OPPO / OnePlus ColorOS《流体云通知/意图共享规范》AndroidOppoIntelligentIntent
+     * 绘制右上角 28dp 《课轨》黑胶小标 Bitmap（缓存复用）
      */
+    private fun getOrCreateVinylBadgeBitmap(
+        accentColor: Int,
+        isDarkSurface: Boolean
+    ): Bitmap {
+        val cacheKey = "${accentColor}_$isDarkSurface"
+        cachedVinylBitmap?.let { existing ->
+            if (cachedVinylKey == cacheKey && !existing.isRecycled) {
+                return existing
+            }
+        }
+
+        val size = 96
+        val bmp = Bitmap.createBitmap(size, size, Bitmap.Config.ARGB_8888)
+        val canvas = Canvas(bmp)
+        val paint = Paint(Paint.ANTI_ALIAS_FLAG)
+        val half = size / 2f
+
+        // 柔和圆角方徽底板
+        paint.style = Paint.Style.FILL
+        paint.color = if (isDarkSurface) 0xFF232936.toInt() else 0xFFF1F5F9.toInt()
+        canvas.drawRoundRect(RectF(2f, 2f, size - 2f, size - 2f), 26f, 26f, paint)
+
+        paint.style = Paint.Style.STROKE
+        paint.strokeWidth = 2.5f
+        paint.color = (accentColor and 0x00FFFFFF) or (0x55 shl 24)
+        canvas.drawRoundRect(RectF(3f, 3f, size - 3f, size - 3f), 25f, 25f, paint)
+
+        // 居中黑胶唱片盘面
+        paint.style = Paint.Style.FILL
+        paint.color = 0xFF0F172A.toInt()
+        canvas.drawCircle(half, half, 31f, paint)
+
+        // 唱片纹理微环
+        paint.style = Paint.Style.STROKE
+        paint.strokeWidth = 2f
+        paint.color = (accentColor and 0x00FFFFFF) or (0x99 shl 24)
+        canvas.drawCircle(half, half, 22f, paint)
+
+        // 主题色唱标芯
+        paint.style = Paint.Style.FILL
+        paint.color = accentColor
+        canvas.drawCircle(half, half, 12f, paint)
+
+        // 中心轴孔
+        paint.color = if (isDarkSurface) 0xFF232936.toInt() else 0xFFFFFFFF.toInt()
+        canvas.drawCircle(half, half, 4.2f, paint)
+
+        cachedVinylKey = cacheKey
+        cachedVinylBitmap = bmp
+        return bmp
+    }
+
+    /**
+     * 为 Android 16 ProgressStyle 提供极简发光圆点进度光标，替代系统默认纸飞机导航箭头
+     */
+    private fun getOrCreateProgressTrackerDotBitmap(accentColor: Int): Bitmap {
+        val key = accentColor.toString()
+        cachedTrackerDotBitmap?.let { existing ->
+            if (cachedTrackerDotKey == key && !existing.isRecycled) {
+                return existing
+            }
+        }
+        val size = 36
+        val bmp = Bitmap.createBitmap(size, size, Bitmap.Config.ARGB_8888)
+        val canvas = Canvas(bmp)
+        val half = size / 2f
+        val paint = Paint(Paint.ANTI_ALIAS_FLAG).apply { style = Paint.Style.FILL }
+
+        paint.color = (accentColor and 0x00FFFFFF) or (0x55 shl 24)
+        canvas.drawCircle(half, half, 16f, paint)
+
+        paint.color = 0xFFFFFFFF.toInt()
+        canvas.drawCircle(half, half, 10.5f, paint)
+
+        paint.color = accentColor
+        canvas.drawCircle(half, half, 7.5f, paint)
+
+        cachedTrackerDotKey = key
+        cachedTrackerDotBitmap = bmp
+        return bmp
+    }
+
+    private fun resolveCardPalette(context: Context, artistTheme: ArtistTheme): CardPalette {
+        val isDark = (context.resources.configuration.uiMode and Configuration.UI_MODE_NIGHT_MASK) ==
+            Configuration.UI_MODE_NIGHT_YES
+
+        val accentColor = when (artistTheme) {
+            ArtistTheme.FUJII_KAZE -> if (isDark) 0xFFFF6E5E.toInt() else 0xFFDC4C3E.toInt()
+            ArtistTheme.ZTMY -> if (isDark) 0xFF34E5B8.toInt() else 0xFF0D9488.toInt()
+            ArtistTheme.YORUSHIKA -> if (isDark) 0xFF38BDF8.toInt() else 0xFF0284C7.toInt()
+            ArtistTheme.JAY_CHOU -> if (isDark) 0xFFFBBF24.toInt() else 0xFFB45309.toInt()
+            ArtistTheme.DAVID_TAO -> if (isDark) 0xFFFF7A33.toInt() else 0xFFEA580C.toInt()
+            ArtistTheme.TAYLOR_SWIFT -> if (isDark) 0xFFF472B6.toInt() else 0xFFDB2777.toInt()
+            ArtistTheme.AESPA -> if (isDark) 0xFFC084FC.toInt() else 0xFF7C3AED.toInt()
+            ArtistTheme.CUSTOM_JSON -> if (isDark) 0xFFFF6E5E.toInt() else 0xFFDC4C3E.toInt()
+        }
+
+        val statusCoralOrAccent = when (artistTheme) {
+            ArtistTheme.FUJII_KAZE, ArtistTheme.CUSTOM_JSON -> if (isDark) 0xFFFF6E5E.toInt() else 0xFFD9483B.toInt()
+            else -> accentColor
+        }
+
+        return if (isDark) {
+            CardPalette(
+                accentArgb = accentColor,
+                headlineArgb = 0xFFF8FAFC.toInt(),
+                mutedTextArgb = 0xFFA3AEBF.toInt(),
+                statusAccentArgb = statusCoralOrAccent,
+                unlitDotArgb = 0x38FFFFFF,
+                pillBgResId = R.drawable.notif_pill_btn_dark,
+                pillTextArgb = 0xFFE2E8F0.toInt(),
+                isDarkSurface = true
+            )
+        } else {
+            CardPalette(
+                accentArgb = accentColor,
+                headlineArgb = 0xFF0F172A.toInt(),
+                mutedTextArgb = 0xFF64748B.toInt(),
+                statusAccentArgb = statusCoralOrAccent,
+                unlitDotArgb = 0x240F172A,
+                pillBgResId = R.drawable.notif_pill_btn_light,
+                pillTextArgb = 0xFF1E293B.toInt(),
+                isDarkSurface = false
+            )
+        }
+    }
+
+    private fun sanitizeCourseTitle(raw: String): String {
+        return raw
+            .replace(Regex("[（(][^）)]*[）)]"), "")
+            .replace(Regex("[【\\[][^】\\]]*[】\\]]"), "")
+            .trim()
+            .ifBlank { raw.trim().ifBlank { "当前课程" } }
+    }
+
+    private fun sanitizeRoom(raw: String): String = raw.trim().removePrefix("@").trim()
+
+    private fun isValidRoom(cleanRoom: String): Boolean =
+        cleanRoom.isNotBlank() && cleanRoom != "待定教室"
+
+    private fun formatCountdownLabel(playState: TrackPlayState, minutes: Int): String {
+        val m = minutes.coerceAtLeast(1)
+        return when (playState) {
+            TrackPlayState.NOW_PLAYING -> "${m}分钟后下课"
+            TrackPlayState.UPCOMING -> "${m}分钟后上课"
+            TrackPlayState.COMPLETED -> "本节已下课"
+        }
+    }
+
     private fun buildOppoIntelligentIntentJson(
         track: TodayTrackUiModel,
         activeFrame: IslandCarouselFrame,
@@ -889,7 +1252,7 @@ object ColorOsFluidCloudHelper {
 
         val capsuleObj = JSONObject()
             .put("status", 1)
-            .put("text", capsuleShortText) // ColorOS 官方流体云关键字段
+            .put("text", capsuleShortText)
             .put("title", activeFrame.capsuleLeftTitle)
             .put("content", activeFrame.capsuleRightContent)
             .put("rightText", capsuleShortText)
@@ -920,9 +1283,6 @@ object ColorOsFluidCloudHelper {
             .toString()
     }
 
-    /**
-     * 2. vivo / iQOO OriginOS《原子岛推送指南》结构化参数
-     */
     private fun buildOriginOsAtomicIslandJson(
         shortRoom: String,
         activeFrame: IslandCarouselFrame,
@@ -961,9 +1321,6 @@ object ColorOsFluidCloudHelper {
             .toString()
     }
 
-    /**
-     * 3. 小米 / Redmi HyperOS《澎湃超级岛 & 焦点通知开发指南》miui.focus.param (param_v2 + param_island)
-     */
     private fun buildHyperOsFocusParamJson(
         track: TodayTrackUiModel,
         minutes: Int,
@@ -1041,9 +1398,6 @@ object ColorOsFluidCloudHelper {
         return JSONObject().put("param_v2", paramV2).toString()
     }
 
-    /**
-     * 4. 荣耀 MagicOS《灵动胶囊与实况窗开发指南》胶囊态与卡片态参数
-     */
     private fun buildMagicOsCapsuleJson(
         activeFrame: IslandCarouselFrame,
         accentHex: String
@@ -1084,18 +1438,10 @@ object ColorOsFluidCloudHelper {
             .toString()
     }
 
-    /**
-     * 专属智能手表穿戴同步通道（特别针对 OPPO Watch X2 / 欢太健康 HeyTap Health 体系）
-     *
-     * 核心设计：
-     * 1. 欢太健康在读取系统通知转发给 OPPO Watch X2 时，默认会过滤所有带有 FLAG_ONGOING_EVENT 的通知；
-     * 2. 因此手表穿戴通知绝不设为 ongoing，保证欢太健康 100% 将其识别为即时事件通知并推送到 OPPO Watch X2；
-     * 3. 配置清脆的手腕脉冲振动 longArrayOf(0, 250, 150, 250)，手腕产生明显双击触感；
-     * 4. 附带 WearableExtender 与“已到教室”打卡按钮，手腕一点即可收起手机与手表提醒。
-     */
     fun postWatchBridgeNotification(
         context: Context,
-        track: TodayTrackUiModel
+        track: TodayTrackUiModel,
+        sessionKey: String = ""
     ) {
         val appContext = context.applicationContext
         ensureNotificationChannel(appContext)
@@ -1103,6 +1449,9 @@ object ColorOsFluidCloudHelper {
 
         val dismissIntent = Intent(appContext, CourseReminderReceiver::class.java).apply {
             action = ACTION_DISMISS_FLUID_CLOUD
+            if (sessionKey.isNotBlank()) {
+                putExtra(CourseAlarmScheduler.EXTRA_SESSION_KEY, sessionKey)
+            }
         }
         val dismissPendingIntent = PendingIntent.getBroadcast(
             appContext,
@@ -1124,8 +1473,8 @@ object ColorOsFluidCloudHelper {
         val minutes = track.minutesUntilStartOrEnd.coerceAtLeast(1)
         val statusText = when (track.playState) {
             TrackPlayState.NOW_PLAYING -> "正在上课 (${minutes}分钟后下课)"
-            TrackPlayState.UPCOMING -> "还有${minutes}分钟上课"
-            TrackPlayState.COMPLETED -> "课程已结束"
+            TrackPlayState.UPCOMING -> "${minutes}分钟后上课"
+            TrackPlayState.COMPLETED -> "本节已下课"
         }
 
         val wearAction = NotificationCompat.Action.Builder(
@@ -1134,12 +1483,9 @@ object ColorOsFluidCloudHelper {
             dismissPendingIntent
         ).build()
 
-        val wearableExtender = NotificationCompat.WearableExtender()
-            .addAction(wearAction)
-
-        val cleanRoom = track.course.room.trim().removePrefix("@").trim()
-        val hasValidRoom = cleanRoom.isNotBlank() && cleanRoom != "待定教室"
-        val bodyLine = if (hasValidRoom) {
+        val wearableExtender = NotificationCompat.WearableExtender().addAction(wearAction)
+        val cleanRoom = sanitizeRoom(track.course.room)
+        val bodyLine = if (isValidRoom(cleanRoom)) {
             "$cleanRoom · ${track.startTime}-${track.endTime} · $statusText"
         } else {
             "${track.startTime}-${track.endTime} · $statusText"
@@ -1148,7 +1494,7 @@ object ColorOsFluidCloudHelper {
         val watchNotification = NotificationCompat.Builder(appContext, CHANNEL_ID_WATCH_BRIDGE)
             .setSmallIcon(R.drawable.ic_stat_schedule)
             .setColor(0xFF2563EB.toInt())
-            .setContentTitle(track.course.name)
+            .setContentTitle(sanitizeCourseTitle(track.course.name))
             .setContentText(bodyLine)
             .setPriority(NotificationCompat.PRIORITY_HIGH)
             .setCategory(NotificationCompat.CATEGORY_REMINDER)
@@ -1166,24 +1512,21 @@ object ColorOsFluidCloudHelper {
         }
     }
 
-    /**
-     * 测试 OPPO Watch X2 / 穿戴设备即时通知与手腕振动
-     */
     fun sendWatchTestNotification(context: Context) {
         val testTrack = TodayTrackUiModel(
             trackNumber = 1,
             course = CourseItem(
-                name = "高等数学",
-                room = "二教 209",
+                name = "无机及分析化学",
+                room = "二教208",
                 dayOfWeek = 1,
-                startSection = 1,
-                endSection = 2
+                startSection = 10,
+                endSection = 11
             ),
-            startTime = "08:00",
-            endTime = "09:35",
+            startTime = "18:30",
+            endTime = "20:05",
             playState = TrackPlayState.UPCOMING,
-            progressFraction = 0.35f,
-            minutesUntilStartOrEnd = 15
+            progressFraction = 0f,
+            minutesUntilStartOrEnd = 6
         )
         postWatchBridgeNotification(context, testTrack)
     }
@@ -1197,86 +1540,116 @@ object ColorOsFluidCloudHelper {
         manager.cancel(NOTIFICATION_ID_WATCH_BRIDGE)
         manager.cancel(LEGACY_NOTIFICATION_ID_MEDIA)
     }
-
-    fun scheduleCourseReminderAlarm(
-        context: Context,
-        course: CourseItem,
-        triggerAtMillis: Long
-    ) {
-        val alarmManager = context.getSystemService(Context.ALARM_SERVICE) as AlarmManager
-        val intent = Intent(context, CourseReminderReceiver::class.java).apply {
-            action = ACTION_TRIGGER_COURSE_REMINDER
-            putExtra(CourseAlarmScheduler.EXTRA_COURSE_NAME, course.name)
-            putExtra(CourseAlarmScheduler.EXTRA_COURSE_ROOM, course.room)
-            putExtra(CourseAlarmScheduler.EXTRA_COURSE_TIME, course.sectionRangeText())
-        }
-        val pendingIntent = PendingIntent.getBroadcast(
-            context,
-            course.id.toInt(),
-            intent,
-            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
-        )
-        runCatching {
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S && !alarmManager.canScheduleExactAlarms()) {
-                alarmManager.setAndAllowWhileIdle(AlarmManager.RTC_WAKEUP, triggerAtMillis, pendingIntent)
-            } else {
-                alarmManager.setExactAndAllowWhileIdle(AlarmManager.RTC_WAKEUP, triggerAtMillis, pendingIntent)
-            }
-        }
-    }
 }
 
 class CourseReminderReceiver : BroadcastReceiver() {
     override fun onReceive(context: Context, intent: Intent?) {
-        when (intent?.action) {
-            ColorOsFluidCloudHelper.ACTION_DISMISS_FLUID_CLOUD -> {
-                ColorOsFluidCloudHelper.cancelFluidCloudNotification(context)
+        val appContext = context.applicationContext
+        val action = intent?.action ?: return
+
+        val powerManager = appContext.getSystemService(Context.POWER_SERVICE) as? PowerManager
+        val wakeLock = powerManager?.newWakeLock(PowerManager.PARTIAL_WAKE_LOCK, "ClassTrack:RtcReceiverLock")
+        runCatching { wakeLock?.acquire(8_000L) }
+
+        try {
+            when (action) {
+                ColorOsFluidCloudHelper.ACTION_DISMISS_FLUID_CLOUD -> {
+                    val sessionKey = intent.getStringExtra(CourseAlarmScheduler.EXTRA_SESSION_KEY).orEmpty()
+                    if (sessionKey.isNotBlank()) {
+                        DataRepository(appContext).markSessionDismissed(sessionKey)
+                    }
+                    ColorOsFluidCloudHelper.cancelFluidCloudNotification(appContext)
+                    CourseAlarmScheduler.cancelLiveTick(appContext)
+                }
+
+                ColorOsFluidCloudHelper.ACTION_TRIGGER_COURSE_REMINDER -> {
+                    val eventType = intent.getStringExtra(CourseAlarmScheduler.EXTRA_EVENT_TYPE)
+                        ?: CourseAlarmScheduler.EVENT_PRE_CLASS
+                    val targetCourseId = intent.getLongExtra(CourseAlarmScheduler.EXTRA_COURSE_ID, -1L)
+
+                    when (eventType) {
+                        CourseAlarmScheduler.EVENT_CLASS_END -> {
+                            // 本节下课节点：补偿毫秒级系统早到偏差，确认下课后收起或顺延下一节
+                            ColorOsFluidCloudHelper.postOrUpdateActiveLiveReminder(
+                                context = appContext,
+                                isSilentUpdate = true,
+                                referenceNow = LocalDateTime.now().plusSeconds(3)
+                            )
+                        }
+
+                        CourseAlarmScheduler.EVENT_CLASS_START -> {
+                            // 准点开课节点：立即将通知切换为「X分钟后下课」+ 点亮实时点阵进度（静默无打扰切入上课态）
+                            ColorOsFluidCloudHelper.postOrUpdateActiveLiveReminder(
+                                context = appContext,
+                                isSilentUpdate = true,
+                                targetCourseId = targetCourseId,
+                                referenceNow = LocalDateTime.now().plusSeconds(3)
+                            )
+                        }
+
+                        else -> {
+                            // 课前提前提醒节点：首发脉冲提醒 + 穿戴手表同步 + 开启每分钟精准刷新链
+                            ColorOsFluidCloudHelper.postOrUpdateActiveLiveReminder(
+                                context = appContext,
+                                isSilentUpdate = false,
+                                targetCourseId = targetCourseId,
+                                allowAnyUpcomingToday = true,
+                                referenceNow = LocalDateTime.now().plusSeconds(3)
+                            )
+                        }
+                    }
+
+                    // 将后续最近的节点晋升为强力 AlarmClock 闹钟，保证下一节点永不失联
+                    CourseAlarmScheduler.rescheduleAll(appContext)
+                }
+
+                ColorOsFluidCloudHelper.ACTION_LIVE_TICK_FLUID_CLOUD -> {
+                    // 严格对齐状态栏 :00.150 秒心跳：永远基于当前真实现实时间重算
+                    ColorOsFluidCloudHelper.postOrUpdateActiveLiveReminder(
+                        context = appContext,
+                        isSilentUpdate = true
+                    )
+                }
+
+                ColorOsFluidCloudHelper.ACTION_CHECK_ACTIVE_REMINDER -> {
+                    CourseAlarmScheduler.rescheduleAll(appContext)
+                    ColorOsFluidCloudHelper.postOrUpdateActiveLiveReminder(
+                        context = appContext,
+                        isSilentUpdate = true
+                    )
+                }
+
+                ColorOsFluidCloudHelper.ACTION_TEST_WATCH_BRIDGE -> {
+                    ColorOsFluidCloudHelper.sendWatchTestNotification(appContext)
+                }
+
+                Intent.ACTION_BOOT_COMPLETED,
+                Intent.ACTION_LOCKED_BOOT_COMPLETED,
+                Intent.ACTION_MY_PACKAGE_REPLACED,
+                Intent.ACTION_TIME_CHANGED,
+                Intent.ACTION_TIMEZONE_CHANGED,
+                AlarmManager.ACTION_SCHEDULE_EXACT_ALARM_PERMISSION_STATE_CHANGED -> {
+                    val userUnlocked = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.N) {
+                        appContext.getSystemService(UserManager::class.java)?.isUserUnlocked ?: true
+                    } else {
+                        true
+                    }
+                    if (userUnlocked) {
+                        runCatching {
+                            CourseAlarmScheduler.rescheduleAll(appContext)
+                            ColorOsFluidCloudHelper.postOrUpdateActiveLiveReminder(
+                                context = appContext,
+                                isSilentUpdate = true
+                            )
+                        }
+                    }
+                }
             }
-            ColorOsFluidCloudHelper.ACTION_TRIGGER_COURSE_REMINDER -> {
-                val name = intent.getStringExtra(CourseAlarmScheduler.EXTRA_COURSE_NAME) ?: "即将上课课程"
-                val room = intent.getStringExtra(CourseAlarmScheduler.EXTRA_COURSE_ROOM) ?: "教学楼"
-                val timeRange = intent.getStringExtra(CourseAlarmScheduler.EXTRA_COURSE_TIME) ?: "08:00-09:35"
-                val leadMin = intent.getIntExtra(CourseAlarmScheduler.EXTRA_LEAD_MINUTES, 20)
-
-                val parts = timeRange.split("-")
-                val startStr = parts.getOrNull(0)?.trim() ?: "08:00"
-                val endStr = parts.getOrNull(1)?.trim() ?: "09:35"
-
-                val reminderTrack = TodayTrackUiModel(
-                    trackNumber = 1,
-                    course = CourseItem(
-                        name = name,
-                        room = room,
-                        dayOfWeek = 1,
-                        startSection = 1,
-                        endSection = 2
-                    ),
-                    startTime = startStr,
-                    endTime = endStr,
-                    playState = TrackPlayState.UPCOMING,
-                    progressFraction = 0.25f,
-                    minutesUntilStartOrEnd = leadMin
-                )
-
-                val repository = DataRepository(context)
-                ColorOsFluidCloudHelper.postFluidCloudTrackNotification(
-                    context = context,
-                    track = reminderTrack,
-                    artistTheme = repository.artistTheme.value,
-                    watchBridgeEnabled = repository.watchBridgeEnabled.value
-                )
-
-                // 触发后续闹钟自动轮转规划，实现全自动持续推送
-                CourseAlarmScheduler.rescheduleAll(context)
-            }
-            ColorOsFluidCloudHelper.ACTION_TEST_WATCH_BRIDGE -> {
-                ColorOsFluidCloudHelper.sendWatchTestNotification(context)
-            }
-            Intent.ACTION_BOOT_COMPLETED,
-            Intent.ACTION_TIME_CHANGED,
-            Intent.ACTION_TIMEZONE_CHANGED -> {
-                // 手机开机重启或系统时间变更时，全自动重新计算未来一周全部课程的后台提醒闹钟
-                CourseAlarmScheduler.rescheduleAll(context)
+        } finally {
+            runCatching {
+                if (wakeLock?.isHeld == true) {
+                    wakeLock.release()
+                }
             }
         }
     }
