@@ -71,7 +71,7 @@ object TimetableCellParser {
     fun parseCells(cells: List<RawTimetableCell>): List<CourseItem> {
         val parsed = cells
             .flatMap { cell -> expandSubCells(cell) }
-            .mapNotNull { subCell -> parseCell(subCell) }
+            .flatMap { subCell -> parseCellItems(subCell) }
         return CourseImporter.mergeAndSanitizeCourses(parsed)
     }
 
@@ -125,23 +125,27 @@ object TimetableCellParser {
 
     private val weekExprRegex = Regex("\\d{1,2}(?:\\s*[-~～,，、]\\s*\\d{1,2})*\\s*(?:\\([单双]?周\\)|（[单双]?周）|[单双]?周)")
     private val sectionHintRegex = Regex(
-        "\\d{1,2}\\s*(?:[-~～,，、]\\s*\\d{1,2})*\\s*(?:小)?节" +
+        "\\d{1,2}\\s*(?:小)?节\\s*[-~～,，、]\\s*(?:第)?\\s*\\d{1,2}\\s*(?:小)?节" +
+            "|\\d{1,2}\\s*(?:[-~～,，、]\\s*\\d{1,2})*\\s*(?:小)?节" +
             "|\\[\\s*\\d{1,2}(?:\\s*[-~～,，]\\s*\\d{1,2})+\\s*\\]" +
             "|\\[\\s*(?:0[1-9]|1[0-8]){2,6}\\s*(?:小?节)?\\s*\\]"
     )
     private val leadingSymbolRegex = Regex("^[◆★☆●○■□▪▲△◇※#*\\s]+")
     private val trailingSymbolRegex = Regex("[◆★☆●○■□▪▲△◇※*\\s]+$")
     private val redundantTrailingTagRegex = Regex("(?:[\\(（\\[【](?:必修|选修|公选|校选|通选|专选|限选|任选|考查|考试|线上|线下)[\\)）\\]】])+$")
-    private val roomLikeRegex = Regex("(?:楼|教|室|馆|场|区|中心|机房|实验|厅|院|看台|[A-Za-z]\\d|\\d{3,})")
+    private val roomLikeRegex = Regex("(?:楼|教|室|馆|场|区|中心|机房|实验|厅|院|看台|图书馆|操场|广场|泳池|[A-Za-z]\\d|\\d{3,}|^[\\u4e00-\\u9fa5]{1,3}\\d{2,4}[A-Za-z]?$)")
 
-    fun parseCell(cell: RawTimetableCell): CourseItem? {
+    fun parseCell(cell: RawTimetableCell): CourseItem? = parseCellItems(cell).firstOrNull()
+
+    fun parseCellItems(cell: RawTimetableCell): List<CourseItem> {
         val day = cell.day
-        if (day !in 1..7) return null
+        if (day !in 1..7) return emptyList()
 
-        val lines = cell.text.lines()
+        val rawNormalized = cell.text.lines()
             .map { it.replace('\u00a0', ' ').replace(Regex("\\s+"), " ").trim() }
             .filter { it.isNotEmpty() && !it.matches(Regex("[-=_*\\s]+")) }
-        if (lines.isEmpty()) return null
+        val lines = CourseImporter.joinBrokenScheduleLines(rawNormalized)
+        if (lines.isEmpty()) return emptyList()
 
         val nameField = fieldValue(cell.fields, nameTitleKeys)
         val teacherField = fieldValue(cell.fields, teacherTitleKeys)
@@ -161,28 +165,71 @@ object TimetableCellParser {
                 line !in nonNameFieldValues && !isTimeLine(line) && !isMetaNoiseLine(line) && line.length >= 2
             }
         }
-        if (nameIdx < 0) return null
+        if (nameIdx < 0) return emptyList()
         val rawName = if (!nameField.isNullOrBlank() && lines.getOrNull(nameIdx)?.contains(nameField) != true) {
             nameField
         } else {
             lines[nameIdx]
         }
         val name = cleanDisplayCourseName(rawName)
-        if (name.length < 2) return null
+        if (name.length < 2) return emptyList()
 
-        // 2. 时间文本（周次 + 节次）
+        // 2. 若单元格内含紧凑多合一排课行（如 UIBE "4-16周李怀征 1节-2节 求103"，或一卡多教师排课），逐条拆解保留全部周次/教师/教室
+        val compoundSegments = lines.mapIndexedNotNull { i, line ->
+            if (i == nameIdx || isMetaNoiseLine(line)) null
+            else CourseImporter.parseCompoundScheduleLine(line)
+        }
+        val rowRange = resolveRowSections(cell)
+        if (compoundSegments.isNotEmpty()) {
+            var fallbackTeacher = teacherField.orEmpty()
+            var fallbackRoom = roomField.orEmpty()
+            if (fallbackTeacher.isEmpty() || fallbackRoom.isEmpty()) {
+                lines.forEachIndexed { i, line ->
+                    if (i == nameIdx || line in nonNameFieldValues || isTimeLine(line) || isMetaNoiseLine(line)) return@forEachIndexed
+                    val roomLike = roomLikeRegex.containsMatchIn(line) || CourseImporter.isLikelyRoomToken(line)
+                    if (fallbackRoom.isEmpty() && roomLike) {
+                        fallbackRoom = line
+                    } else if (fallbackTeacher.isEmpty() && !roomLike && line.length in 2..12 && !line.any { it.isDigit() }) {
+                        fallbackTeacher = line
+                    }
+                }
+            }
+            return compoundSegments.map { seg ->
+                val rawSegRange = seg.startSection.coerceIn(1, 18) to seg.endSection.coerceIn(seg.startSection.coerceIn(1, 18), 18)
+                // 严格遵循行头冲突校验：当单元格在表格中有明确行头且显式节次完全落于行外（如误识或串格），回退到所在行节次
+                val resolvedRange = when {
+                    rowRange == null -> rawSegRange
+                    rangesOverlap(rawSegRange, rowRange) -> rawSegRange
+                    else -> rowRange
+                }
+                CourseItem(
+                    name = name,
+                    room = seg.room.ifBlank { fallbackRoom }.removePrefix("@").trim().ifBlank { "待定教室" },
+                    teacher = seg.teacher.ifBlank { fallbackTeacher }.trim(),
+                    dayOfWeek = day,
+                    startSection = resolvedRange.first,
+                    endSection = resolvedRange.second,
+                    startWeek = seg.weeks.startWeek,
+                    endWeek = seg.weeks.endWeek,
+                    weeksSpec = seg.weeks.weeksSpec,
+                    weekParity = seg.weeks.parity
+                )
+            }
+        }
+
+        // 3. 常规时间文本（周次 + 节次）
         val timeLines = lines.filterIndexed { i, l -> i != nameIdx && isTimeLine(l) }
         val timeText = listOfNotNull(timeField, timeLines.joinToString(" ").takeIf { it.isNotBlank() })
             .distinct()
             .joinToString(" ")
 
-        // 3. 教师与教室：字段优先，其次启发式
+        // 4. 教师与教室：字段优先，其次启发式
         var teacher = teacherField.orEmpty()
         var room = roomField.orEmpty()
         if (teacher.isEmpty() || room.isEmpty()) {
             lines.forEachIndexed { i, line ->
                 if (i == nameIdx || line in nonNameFieldValues || isTimeLine(line) || isMetaNoiseLine(line)) return@forEachIndexed
-                val roomLike = roomLikeRegex.containsMatchIn(line)
+                val roomLike = roomLikeRegex.containsMatchIn(line) || CourseImporter.isLikelyRoomToken(line)
                 if (room.isEmpty() && roomLike) {
                     room = line
                 } else if (teacher.isEmpty() && !roomLike && line.length in 2..12 && !line.any { it.isDigit() }) {
@@ -191,36 +238,37 @@ object TimetableCellParser {
             }
         }
 
-        // 4. 周次（直接传入完整 timeText，由 CourseImporter.parseWeekInfo 剥离节次并保留后置 (单)/(双) 标记）
+        // 5. 周次（直接传入完整 timeText，由 CourseImporter.parseWeekInfo 剥离节次并保留后置 (单)/(双) 标记）
         val hasWeekInfo = timeText.contains("周") || timeText.contains("单") || timeText.contains("双")
         val weeks = if (hasWeekInfo) CourseImporter.parseWeekInfo(timeText) else null
 
-        // 5. 节次
-        val rowRange = resolveRowSections(cell)
+        // 6. 节次
         val explicitRange = extractExplicitSections(timeText, lines.filterIndexed { i, _ -> i != nameIdx })
         val sections = when {
             explicitRange != null && rowRange == null -> explicitRange
             explicitRange != null && rowRange != null && rangesOverlap(explicitRange, rowRange) -> explicitRange
             rowRange != null -> rowRange
-            else -> return null
+            else -> return emptyList()
         }
 
-        return CourseItem(
-            name = name,
-            room = room.removePrefix("@").trim().ifBlank { "待定教室" },
-            teacher = teacher.trim(),
-            dayOfWeek = day,
-            startSection = sections.first.coerceIn(1, 18),
-            endSection = sections.second.coerceIn(sections.first.coerceIn(1, 18), 18),
-            startWeek = weeks?.startWeek ?: 1,
-            endWeek = weeks?.endWeek ?: 18,
-            weeksSpec = weeks?.weeksSpec.orEmpty(),
-            weekParity = weeks?.parity ?: WeekParity.ALL
+        return listOf(
+            CourseItem(
+                name = name,
+                room = room.removePrefix("@").trim().ifBlank { "待定教室" },
+                teacher = teacher.trim(),
+                dayOfWeek = day,
+                startSection = sections.first.coerceIn(1, 18),
+                endSection = sections.second.coerceIn(sections.first.coerceIn(1, 18), 18),
+                startWeek = weeks?.startWeek ?: 1,
+                endWeek = weeks?.endWeek ?: 18,
+                weeksSpec = weeks?.weeksSpec.orEmpty(),
+                weekParity = weeks?.parity ?: WeekParity.ALL
+            )
         )
     }
 
     private fun cleanDisplayCourseName(raw: String): String {
-        val base = raw
+        val base = CourseImporter.stripCourseCodeAndClassSuffix(raw)
             .replace(leadingSymbolRegex, "")
             .replace(trailingSymbolRegex, "")
             .replace("（", "(")
@@ -238,7 +286,7 @@ object TimetableCellParser {
             line.contains("单周") || line.contains("双周")
 
     private fun isMetaNoiseLine(line: String): Boolean =
-        line.contains("学分") || line.contains("学时") || line.startsWith("教学班") || line.startsWith("选课备注")
+        CourseImporter.isCourseMetaNoise(line)
 
     private fun rangesOverlap(a: Pair<Int, Int>, b: Pair<Int, Int>): Boolean =
         a.first <= b.second && b.first <= a.second

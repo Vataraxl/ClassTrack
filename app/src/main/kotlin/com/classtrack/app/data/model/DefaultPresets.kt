@@ -17,6 +17,13 @@ object DefaultPresets {
             url = "http://zhjw.uibe.edu.cn"
         ),
         UniversityPortalPreset(
+            id = "uibe_bkjw",
+            schoolName = "对外经济贸易大学",
+            portalLabel = "UIBE本科教务课表 (bkjw新端)",
+            systemType = "UIBE本科教务",
+            url = "https://bkjw.uibe.edu.cn"
+        ),
+        UniversityPortalPreset(
             id = "bjfu_jwxt",
             schoolName = "北京林业大学",
             portalLabel = "北林教务系统",

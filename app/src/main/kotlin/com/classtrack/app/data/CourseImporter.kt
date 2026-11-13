@@ -337,8 +337,14 @@ ${buildEmptyThemeTemplateJson()}
             }
         }
 
-        // 3. 尝试解析高校教务系统原生接口返回的 JSON（如新正方 kbList、强智接口、树维、金智接口等）
-        if (trimmed.startsWith("{") && (trimmed.contains("\"kcmc\"") || trimmed.contains("\"courseName\"") || trimmed.contains("\"kbList\"") || trimmed.contains("\"lessonList\""))) {
+        // 3. 尝试解析高校教务系统原生接口返回的 JSON（如新正方 kbList、强智接口、树维、金智、UIBE接口等）
+        if (trimmed.startsWith("{") && (
+                trimmed.contains("\"kcmc\"") || trimmed.contains("\"courseName\"") ||
+                trimmed.contains("\"kbList\"") || trimmed.contains("\"lessonList\"") ||
+                trimmed.contains("\"skxq\"") || trimmed.contains("\"ksjc\"") ||
+                trimmed.contains("\"kcms\"") || trimmed.contains("\"jxdd\"") ||
+                trimmed.contains("\"arrangeList\"") || trimmed.contains("\"scheduleList\"")
+            )) {
             val apiCourses = parseGenericUniversityApiJson(trimmed)
             if (apiCourses.isNotEmpty()) {
                 return ImportResult(
@@ -365,36 +371,53 @@ ${buildEmptyThemeTemplateJson()}
                 }
             }
 
-            // 4.2 教务接口常见的外层数组格式
-            val apiCourses = parseGenericUniversityApiJson(trimmed)
-            if (apiCourses.isNotEmpty()) {
-                return ImportResult(
-                    success = true,
-                    sourceType = "教务系统原生数据接口",
-                    courses = apiCourses,
-                    message = "成功解析教务接口数据共 ${apiCourses.size} 门课程"
-                )
+            // 4.2 教务接口常见的外层数组格式（排除含 dayOfWeek + startSection 的 WebExtractedCourse 结构）
+            if (!(trimmed.contains("\"dayOfWeek\"") && trimmed.contains("\"startSection\""))) {
+                val apiCourses = parseGenericUniversityApiJson(trimmed)
+                if (apiCourses.isNotEmpty()) {
+                    return ImportResult(
+                        success = true,
+                        sourceType = "教务系统原生数据接口",
+                        courses = apiCourses,
+                        message = "成功解析教务接口数据共 ${apiCourses.size} 门课程"
+                    )
+                }
             }
 
             runCatching {
                 val webList = json.decodeFromString<List<WebExtractedCourse>>(trimmed)
                 if (webList.isNotEmpty()) {
                     val mapped = webList.mapIndexed { index, item ->
+                        val cleanedName = stripCourseCodeAndClassSuffix(item.name)
+                            .replace("（", "(")
+                            .replace("）", ")")
+                            .trim()
+                        val cleanedRoom = item.room.removePrefix("@").trim().ifBlank { "待定教室" }
+                        val rawSpec = item.weeksSpec.trim()
+                        val normalizedWeeks = if (rawSpec.any { it == '周' || it == '单' || it == '双' || it == '，' || it == '~' }) {
+                            parseWeekInfo(rawSpec)
+                        } else {
+                            null
+                        }
+                        val resolvedStartWeek = (normalizedWeeks?.startWeek ?: item.startWeek).coerceAtLeast(1)
+                        val resolvedEndWeek = (normalizedWeeks?.endWeek ?: item.endWeek).coerceAtLeast(resolvedStartWeek)
+                        val resolvedSpec = normalizedWeeks?.weeksSpec ?: rawSpec
+                        val resolvedParity = when (item.parity.uppercase()) {
+                            "ODD", "单" -> WeekParity.ODD
+                            "EVEN", "双" -> WeekParity.EVEN
+                            else -> normalizedWeeks?.parity ?: WeekParity.ALL
+                        }
                         CourseItem(
-                            name = item.name.trim(),
-                            room = item.room.ifBlank { "待定教室" },
-                            teacher = item.teacher,
+                            name = cleanedName,
+                            room = cleanedRoom,
+                            teacher = item.teacher.trim(),
                             dayOfWeek = item.dayOfWeek.coerceIn(1, 7),
                             startSection = item.startSection.coerceIn(1, 18),
                             endSection = item.endSection.coerceAtLeast(item.startSection).coerceIn(1, 18),
-                            startWeek = item.startWeek.coerceAtLeast(1),
-                            endWeek = item.endWeek.coerceAtLeast(item.startWeek),
-                            weeksSpec = item.weeksSpec.trim(),
-                            weekParity = when (item.parity.uppercase()) {
-                                "ODD", "单" -> WeekParity.ODD
-                                "EVEN", "双" -> WeekParity.EVEN
-                                else -> WeekParity.ALL
-                            },
+                            startWeek = resolvedStartWeek,
+                            endWeek = resolvedEndWeek,
+                            weeksSpec = resolvedSpec,
+                            weekParity = resolvedParity,
                             trackColorIndex = index % 6
                         )
                     }
@@ -486,6 +509,10 @@ ${buildEmptyThemeTemplateJson()}
                     val first = element[0].jsonObject
                     if (first.keys.any {
                         it.contains("kcmc", ignoreCase = true) ||
+                            it.equals("kcm", ignoreCase = true) ||
+                            it.equals("skxq", ignoreCase = true) ||
+                            it.equals("ksjc", ignoreCase = true) ||
+                            it.equals("jxdd", ignoreCase = true) ||
                             it.contains("course", ignoreCase = true) ||
                             it.contains("lesson", ignoreCase = true) ||
                             it.contains("name", ignoreCase = true)
@@ -495,7 +522,7 @@ ${buildEmptyThemeTemplateJson()}
                 }
             }
             is JsonObject -> {
-                val candidateKeys = listOf("kbList", "data", "lessons", "courses", "result", "list", "rows", "items", "kbcxAzc", "scheduleList")
+                val candidateKeys = listOf("kbList", "data", "datas", "lessons", "courses", "result", "list", "rows", "items", "kbcxAzc", "scheduleList", "arrangeList", "timetable")
                 for (key in candidateKeys) {
                     val target = element[key] ?: continue
                     if (target is JsonArray) {
@@ -518,11 +545,186 @@ ${buildEmptyThemeTemplateJson()}
         return null
     }
 
+    private val enrollmentNoiseRegex = Regex("(?:选课)?人数\\s*[:：]?\\s*\\d+")
+    private val courseCodeWithClassSuffixRegex = Regex(
+        "\\s*(?:\\[[A-Za-z0-9_\\-]{1,20}\\]|\\([A-Za-z]{2,8}\\d{2,6}[A-Za-z0-9_\\-]*\\))(?:\\s*(?:#?\\d{1,4}班?|班\\d{1,4}))?\\s*$"
+    )
+    private val explicitVenueKeywordRegex = Regex(
+        "(?:楼|教|室|馆|场|区|中心|机房|实验|厅|院|看台|图书馆|操场|广场|泳池|车间|画室|琴房)"
+    )
+    private val shortBuildingRoomRegex = Regex(
+        "^[\\u4e00-\\u9fa5]{1,3}[-#]?[A-Za-z]?\\d{2,4}[A-Za-z]?$|^[A-Za-z]{1,3}[-#]?\\d{2,4}[A-Za-z]?$"
+    )
+    private val compoundWeekPartRegex = Regex(
+        "[\\[(（【]?\\s*\\d{1,2}(?:\\s*(?:-|~|～|至|到|,|，|、)\\s*\\d{1,2})*\\s*(?:\\([单双]?周\\)|（[单双]?周）|[单双]?周)(?:[,，、\\s]*(?:\\([单双]\\)|（[单双]）))?\\s*[\\])）】]?(?:[,，、\\s]+\\d{1,2}(?:\\s*(?:-|~|～|至|到|,|，|、)\\s*\\d{1,2})*\\s*(?:\\([单双]?周\\)|（[单双]?周）|[单双]?周)(?:[,，、\\s]*(?:\\([单双]\\)|（[单双]）))?)*"
+    )
+    private val compoundSectionPartRegex = Regex(
+        "(?:第|[\\[(（【])?\\s*\\d{1,2}\\s*小?节\\s*(?:-|~|～|至|到|,|，)\\s*(?:第)?\\s*\\d{1,2}\\s*小?节" +
+            "|(?:第|[\\[(（【])?\\s*\\d{1,2}(?:\\s*(?:-|~|～|至|到|,|，)\\s*\\d{1,2})+\\s*(?:小?节|[\\])）】])" +
+            "|(?:第|[\\[(（【])?\\s*(?:0[1-9]|1[0-8]){2,6}\\s*(?:小?节|[\\])）】])" +
+            "|(?<!\\d)(?:第|[\\[(（【])?\\s*\\d{1,2}\\s*小?节"
+    )
+
+    data class CompoundScheduleSegment(
+        val weeks: ParsedWeeks,
+        val startSection: Int,
+        val endSection: Int,
+        val teacher: String,
+        val room: String
+    )
+
+    private val metaNoiseLineRegex = Regex(
+        "(?:^|\\s)(?:总|周|理论|实验|上机|实践|课程)?学[分时]\\s*[:：]" +
+            "|^\\d+(?:\\.\\d+)?\\s*(?:个)?学[分时]$" +
+            "|^教学班|^选课备注"
+    )
+
+    /** 判断文本是否像有效选课人数统计等噪声行 */
+    fun isEnrollmentNoise(raw: String): Boolean = enrollmentNoiseRegex.containsMatchIn(raw)
+
+    /**
+     * 判断整行是否为课表统计/元信息噪声行（防止把“数学分析”、“化学分析”中出现的“学分”二字误判为学分信息）
+     */
+    fun isCourseMetaNoise(raw: String): Boolean {
+        val t = raw.trim()
+        return isEnrollmentNoise(t) || metaNoiseLineRegex.containsMatchIn(t)
+    }
+
+    /**
+     * 去除课程名称末尾的课程代码与教学班编号，例如：
+     * "思想道德与法治[ETH105] 19" -> "思想道德与法治"
+     * "数学分析（一）[STA102] 1" -> "数学分析(一)"
+     */
+    fun stripCourseCodeAndClassSuffix(raw: String): String {
+        var s = raw
+            .replace('\u00a0', ' ')
+            .replace("【", "[")
+            .replace("】", "]")
+            .replace(enrollmentNoiseRegex, " ")
+            .trim()
+        repeat(2) {
+            val cleaned = s.replace(courseCodeWithClassSuffixRegex, "").trim()
+            if (cleaned.length >= 2) s = cleaned
+        }
+        return s.trim()
+    }
+
+    /** 判断单个词条或行是否像教室/场地（涵盖 UIBE 短代号如 "求103"、"宁726"、"博305"、"田径场" 等） */
+    fun isLikelyRoomToken(raw: String): Boolean {
+        val s = raw.removePrefix("@").trim()
+        if (s.length < 2 || s.length > 32) return false
+        if (enrollmentNoiseRegex.containsMatchIn(s)) return false
+        if (s.endsWith("周") || s.endsWith("节") || s.endsWith("学分") || s.endsWith("学时")) return false
+        if (s.contains("单周") || s.contains("双周") || s.contains("选课")) return false
+        if (Regex("\\d\\s*(?:小?节|[单双]?周)").containsMatchIn(s)) return false
+        return explicitVenueKeywordRegex.containsMatchIn(s) ||
+            shortBuildingRoomRegex.matches(s) ||
+            Regex("(?:^|[^A-Za-z])[\\u4e00-\\u9fa5]{1,3}[-#]?[A-Za-z]?\\d{2,4}").containsMatchIn(s) ||
+            Regex("[A-Za-z]\\d{2,4}").containsMatchIn(s)
+    }
+
+    /**
+     * 合并因窄屏/文本复制被意外折断的排课续行，例如：
+     * - "4-16周李怀征" + "1节-2节 求103" -> "4-16周李怀征 1节-2节 求103"
+     * - "10-16周叶鹏 8" + "节-9节 宁331" -> "10-16周叶鹏 8节-9节 宁331"
+     * - "4-12周,15-16" + "周陈俊彰 6节-7节 求319" -> "4-12周,15-16周陈俊彰 6节-7节 求319"
+     * - "思想道德与法治[ETH105] 1" + "9" -> "思想道德与法治[ETH105] 19"
+     */
+    fun joinBrokenScheduleLines(rawLines: List<String>): List<String> {
+        val merged = mutableListOf<String>()
+        for (rawLine in rawLines) {
+            val line = rawLine.replace('\u00a0', ' ').replace(Regex("\\s+"), " ").trim()
+            if (line.isEmpty()) continue
+            val prev = merged.lastOrNull()
+            if (prev != null) {
+                val brokenUnitWrap =
+                    (Regex(".*\\d$").matches(prev) && Regex("^(?:小?节|[单双]?周|\\s*-\\s*\\d+\\s*小?节).*").matches(line)) ||
+                        (Regex(".*[-,~～]$").matches(prev) && Regex("^\\d.*").matches(line))
+                val brokenClassNumWrap =
+                    Regex(".*\\[[A-Za-z0-9_\\-]+\\](?:\\s*\\d{0,2})?$").matches(prev) &&
+                        Regex("^\\d{1,3}$").matches(line)
+                val brokenSplitTitleSuffix =
+                    !prev.contains("周") && !prev.contains("节") &&
+                        (line.startsWith("]") || line.startsWith("】") ||
+                            Regex("^（?[一二三四五六A-Za-z]\\）?\\s*\\[.*").matches(line) ||
+                            Regex("^\\[\\s*[A-Za-z0-9_\\-]+\\s*\\].*").matches(line))
+                val brokenWeekThenExplicitSection =
+                    prev.contains("周") && !prev.contains("节") &&
+                        Regex("^\\d{1,2}\\s*小?节.*").matches(line)
+
+                if (brokenUnitWrap || brokenClassNumWrap) {
+                    merged[merged.lastIndex] = prev + line
+                    continue
+                }
+                if (brokenSplitTitleSuffix) {
+                    merged[merged.lastIndex] = prev + line
+                    continue
+                }
+                if (brokenWeekThenExplicitSection) {
+                    merged[merged.lastIndex] = "$prev $line"
+                    continue
+                }
+            }
+            merged.add(line)
+        }
+        return merged
+    }
+
+    /**
+     * 解析紧凑多合一排课行（典型如 UIBE bkjw "4-16周李怀征 1节-2节 求103"、
+     * "4-12周,15-16周陈俊彰 6节-7节 求319"、"5-16周单萧语 6节-7节 求321"、"4-16周吴超 8节-9节 田径场"）。
+     */
+    fun parseCompoundScheduleLine(rawLine: String): CompoundScheduleSegment? {
+        val cleaned = rawLine
+            .replace('\u00a0', ' ')
+            .replace(enrollmentNoiseRegex, " ")
+            .replace(Regex("\\s+"), " ")
+            .trim()
+        if (cleaned.isEmpty() || !cleaned.contains("周") || !cleaned.contains("节")) return null
+
+        val weekMatch = compoundWeekPartRegex.find(cleaned) ?: return null
+        val weeks = parseWeekInfo(weekMatch.value)
+
+        val beforeWeek = cleaned.substring(0, weekMatch.range.first).trim()
+        val afterWeek = cleaned.substring(weekMatch.range.last + 1).trim()
+        val withoutWeek = listOf(beforeWeek, afterWeek).filter { it.isNotEmpty() }.joinToString(" ")
+        val secMatch = compoundSectionPartRegex.find(withoutWeek) ?: return null
+        val sections = parseSectionRange(secMatch.value) ?: return null
+
+        val beforeSec = withoutWeek.substring(0, secMatch.range.first).trim()
+        val afterSec = withoutWeek.substring(secMatch.range.last + 1).trim()
+
+        var teacher = ""
+        var room = ""
+
+        val tokens = listOf(beforeSec, afterSec)
+            .filter { it.isNotEmpty() }
+            .flatMap { part -> part.split(Regex("[\\s|;；]+")) }
+            .map { tok -> tok.trim(' ', ':', '：', ',', '，', ';', '；', '[', ']', '(', ')', '【', '】', '（', '）') }
+            .filter { it.isNotEmpty() && it != "周" && it != "节" && it != "小节" && !isEnrollmentNoise(it) }
+
+        for (tok in tokens) {
+            if (room.isBlank() && isLikelyRoomToken(tok)) {
+                room = tok.removePrefix("@").trim()
+            } else if (teacher.isBlank() && tok.length in 2..14 && !tok.any { it.isDigit() } && !isLikelyRoomToken(tok)) {
+                teacher = tok
+            }
+        }
+
+        return CompoundScheduleSegment(
+            weeks = weeks,
+            startSection = sections.first,
+            endSection = sections.second,
+            teacher = teacher,
+            room = room
+        )
+    }
+
     /**
      * 规范化课程名称：去除前缀特殊符号与全角/半角修饰标签（必修、选修、重修、教学班、学时等），便于识别同门课程的加长课
      */
     fun normalizeCourseName(name: String): String {
-        var s = name.trim()
+        var s = stripCourseCodeAndClassSuffix(name)
             .replace(Regex("^[◆★●▪\\s]+"), "")
             .replace("（", "(")
             .replace("）", ")")
@@ -545,8 +747,8 @@ ${buildEmptyThemeTemplateJson()}
         s = s.replace(Regex("\\([0-9.]+\\s*学分\\)"), "")
             .replace(Regex("\\[[0-9.]+\\s*学分\\]"), "")
 
-        // 去除教学班或编号后缀（如 [01], (01), _01, -01）
-        s = s.replace(Regex("\\[[A-Za-z0-9_\\-]+\\]$"), "")
+        // 去除教学班或编号后缀（如 [01], [ETH105] 19, (01), _01, -01）
+        s = stripCourseCodeAndClassSuffix(s)
             .replace(Regex("\\(0[0-9]+\\)$"), "")
             .replace(Regex("\\([0-9]{2,}\\)$"), "")
             .replace(Regex("_[A-Za-z0-9_]+$"), "")
@@ -568,6 +770,8 @@ ${buildEmptyThemeTemplateJson()}
         // 先剥离显式周次干扰（覆盖 "1-16周"、"2-12(周)"、"2,6,8-9,12-18(周)"、"[01-16周]"、"(1-8单周)"、"{第1-16周|2节/单周}" 等所有变体），
         // 严防在复合文本中误将周次数字（如 2-12(周)）或每周期节数（2节/周）当作节次！
         val sanitized = trimmed
+            .replace(enrollmentNoiseRegex, " ")
+            .replace(Regex("\\[[A-Za-z0-9_\\-]{1,20}\\](?:\\s*\\d{1,4})?"), " ")
             .replace(Regex("\\{[^}]*周[^}]*\\}"), " ")
             .replace(Regex("\\[[^\\]]*周[^\\]]*\\]"), " ")
             .replace(Regex("\\b\\d{1,2}(?:\\s*(?:-|~|至|到|,|，|、)\\s*\\d{1,2})*\\s*(?:\\([单双]?周\\)|（[单双]?周）|[单双]?周)(?:\\([^)]*\\)|（[^）]*）)?"), " ")
@@ -596,8 +800,8 @@ ${buildEmptyThemeTemplateJson()}
             return Pair(start, start + 1)
         }
 
-        // 2. 优先匹配多节连排枚举（如 [01-02-03节]、1-2-3节、第1,2,3节、01-02-03-04节），防止被双数字正则截断前两节
-        val listMatch = Regex("(?<!\\d)(?:第|[\\[(（【])?\\s*(\\d{1,2}(?:\\s*(?:,|-|~)\\s*\\d{1,2}){2,})\\s*(?:小?节|[\\])）】])").find(sanitized)
+        // 2. 优先匹配多节连排枚举（如 [01-02-03节]、1-2-3节、第1,2,3节、1节,2节,3节、01-02-03-04节），防止被双数字正则截断前两节
+        val listMatch = Regex("(?<!\\d)(?:第|[\\[(（【])?\\s*(\\d{1,2}(?:\\s*小?节)?(?:\\s*(?:,|-|~)\\s*(?:第)?\\s*\\d{1,2}(?:\\s*小?节)?){2,})\\s*(?:小?节|[\\])）】])").find(sanitized)
         if (listMatch != null) {
             val nums = Regex("\\d+").findAll(listMatch.groupValues[1]).mapNotNull { it.value.toIntOrNull() }.filter { it in 1..18 }.toList()
             if (nums.isNotEmpty()) {
@@ -606,8 +810,8 @@ ${buildEmptyThemeTemplateJson()}
         }
 
         // 3. 匹配明确标注 "节" 或带有括号区间的节次范围，例如：
-        // [01-03节], 第1-3节, 1-3节, 1~3节, (1-2), (01-03), [1-3], (1-3节)
-        val explicitRange = Regex("(?<!\\d)(?:第|[\\[(（【])?\\s*(\\d{1,2})\\s*(?:-|~|,)\\s*(\\d{1,2})\\s*(?:小?节|[\\])）】])").find(sanitized)
+        // 1节-2节, 3节-5节, 第1节-第2节, [01-03节], 第1-3节, 1-3节, 1~3节, (1-2), (01-03), [1-3], (1-3节)
+        val explicitRange = Regex("(?<!\\d)(?:第|[\\[(（【])?\\s*(\\d{1,2})(?:\\s*小?节)?\\s*(?:-|~|,)\\s*(?:第)?\\s*(\\d{1,2})\\s*(?:小?节|[\\])）】])").find(sanitized)
         if (explicitRange != null) {
             val start = explicitRange.groupValues[1].toIntOrNull()
             val end = explicitRange.groupValues[2].toIntOrNull()
@@ -704,12 +908,15 @@ ${buildEmptyThemeTemplateJson()}
             else -> WeekParity.ALL
         }
 
-        // 剥离显式节次信息与时间/星期前缀（如 "9-10节", "第1-2节", "[01-02节]", "(3-5节)", "[0102节]", "周一第1,2节", "2节/单周", "08:00-09:35"）
+        // 剥离显式节次、课程代码/班号、教室门牌号与选课人数噪声（如 "1节-2节", "3节-5节", "[ETH105] 19", "选课人数：39", "宁331"）
         val withoutSections = text
+            .replace(enrollmentNoiseRegex, " ")
+            .replace(Regex("\\[[A-Za-z0-9_\\-]{1,20}\\](?:\\s*\\d{1,4})?"), " ")
+            .replace(Regex("(?<=[\\u4e00-\\u9fa5A-Za-z])\\d{1,4}(?![周节单双\\-~～,，])"), " ")
             .replace(Regex("\\d{1,2}\\s*[:：]\\s*\\d{2}"), " ")
             .replace(Regex("(?:周|星期|礼拜)[一二三四五六日天七1-7]"), " ")
             .replace(Regex("\\d+\\s*小?节\\s*/\\s*[单双]?周"), " ")
-            .replace(Regex("(?:第|[\\[(（【])?\\s*\\d{1,2}(?:\\s*(?:-|~|～|至|到|,|，|、)\\s*\\d{1,2})+\\s*(?:小?节|[\\])）】])(?!\\s*周)"), " ")
+            .replace(Regex("(?:第|[\\[(（【])?\\s*\\d{1,2}(?:\\s*小?节)?(?:\\s*(?:-|~|～|至|到|,|，|、)\\s*(?:第)?\\s*\\d{1,2}(?:\\s*小?节)?)+\\s*(?:小?节|[\\])）】])(?!\\s*周)"), " ")
             .replace(Regex("(?:第|[\\[(（【])?\\s*(?:0[1-9]|1[0-8]){2,6}\\s*(?:小?节|[\\])）】])"), " ")
             .replace(Regex("第?\\s*[0-9一二三四五六七八九十]+\\s*大节"), " ")
             .replace(Regex("(?:第|[\\[(（【])?\\s*\\d{1,2}\\s*小?节"), " ")
@@ -1057,11 +1264,17 @@ ${buildEmptyThemeTemplateJson()}
             courseArray.forEachIndexed { index, elem ->
                 if (elem !is JsonObject) return@forEachIndexed
                 val obj = elem.jsonObject
-                val name = extractString(obj, "kcmc", "courseName", "className", "kcm", "name", "course_name")
+                val rawName = extractString(obj, "kcmc", "courseName", "className", "kcm", "name", "course_name", "course", "kc", "title")
+                val name = stripCourseCodeAndClassSuffix(rawName)
                 if (name.isBlank() || name.length < 2) return@forEachIndexed
 
-                val room = extractString(obj, "cdmc", "jxcdmc", "room", "classroom", "place", "location", "cd_id", "jsmc", "jasyl").ifBlank { "待定教室" }
-                val teacher = extractString(obj, "xm", "teName", "teacher", "zjsxm", "rkjs", "teacherName", "jsmc")
+                val rawRoom = extractString(obj, "jxdd", "skdd", "jsdd", "cdmc", "jxcdmc", "room", "classroom", "place", "location", "cd_id", "jsmc", "jasyl")
+                val room = rawRoom.removePrefix("@").trim().ifBlank { "待定教室" }
+                val rawTeacher = extractString(obj, "rkjsxm", "skjs", "jsxm", "xm", "teName", "teacher", "zjsxm", "rkjs", "teacherName")
+                val teacher = rawTeacher.ifBlank {
+                    val fallbackJsmc = extractString(obj, "jsmc")
+                    if (fallbackJsmc.isNotBlank() && fallbackJsmc != rawRoom && !isLikelyRoomToken(fallbackJsmc)) fallbackJsmc else ""
+                }
                 val dayOfWeek = extractDayOfWeek(obj, "xqj", "dayOfWeek", "day", "xq", "weekday", "week", "skxq", "xqjmc", "skxqmc", "day_of_week") ?: 1
 
                 var startSec = extractInt(obj, "startUnit", "ksjc", "startSection", "beginSection", "qsdj") ?: 1
@@ -1140,9 +1353,10 @@ ${buildEmptyThemeTemplateJson()}
             raw
         }
 
-        val lines = cleaned.lines().map { it.trim() }.filter { it.isNotEmpty() }
+        val lines = joinBrokenScheduleLines(cleaned.lines())
         val rawCourses = mutableListOf<CourseItem>()
         var currentDay = 1
+        var activeCardTitle = ""
 
         var idx = 0
         while (idx < lines.size) {
@@ -1151,23 +1365,77 @@ ${buildEmptyThemeTemplateJson()}
             // 1. 星期标头识别（若该行同时包含节次，更新星期后继续解析该行；纯标头行则递增跳过）
             val matchedDay = parseChineseDayOfWeek(line)
             val lineSecRange = parseSectionRange(line)
-            if (matchedDay != null && lineSecRange == null && !line.contains("节") &&
+            val lineCompound = parseCompoundScheduleLine(line)
+
+            if (matchedDay != null && lineSecRange == null && lineCompound == null && !line.contains("节") &&
                 (line.length <= 5 || line.startsWith("周") || line.startsWith("星期") || line.startsWith("礼拜"))
             ) {
                 currentDay = matchedDay
+                activeCardTitle = ""
                 idx++
                 continue
             } else if (matchedDay != null && (line.startsWith("周") || line.startsWith("星期") || line.startsWith("礼拜"))) {
                 currentDay = matchedDay
+                activeCardTitle = ""
+            }
+
+            // 1.5 过滤 UIBE 卡片尾部 "选课人数：99" 及 "学分：3.0" 等纯元信息噪声行并结束当前卡片标题上下文
+            if (isCourseMetaNoise(line)) {
+                if (isEnrollmentNoise(line)) activeCardTitle = ""
+                idx++
+                continue
+            }
+
+            // 1.6 若本行是紧凑多合一排课行（如 "4-16周李怀征 1节-2节 求103"、"4周刘菁 6节-7节 求321"），优先精确拆解
+            if (lineCompound != null) {
+                val resolvedTitle = activeCardTitle.ifBlank {
+                    var found = ""
+                    for (back in (idx - 1) downTo maxOf(0, idx - 4)) {
+                        val prev = lines[back]
+                        if (isEnrollmentNoise(prev) || parseChineseDayOfWeek(prev) != null) break
+                        if (parseCompoundScheduleLine(prev) != null) continue
+                        if (parseSectionRange(prev) != null || prev.contains("周")) continue
+                        val cleanTitle = stripCourseCodeAndClassSuffix(prev)
+                        if (cleanTitle.length in 2..36 && !isLikelyRoomToken(cleanTitle)) {
+                            found = cleanTitle
+                            break
+                        }
+                    }
+                    found.ifBlank { "课程 #${rawCourses.size + 1}" }
+                }
+                activeCardTitle = resolvedTitle
+                rawCourses.add(
+                    CourseItem(
+                        name = resolvedTitle.replace(Regex("^[◆★●▪\\s]+"), ""),
+                        room = lineCompound.room.ifBlank { "待定教室" },
+                        teacher = lineCompound.teacher,
+                        dayOfWeek = currentDay,
+                        startSection = lineCompound.startSection.coerceIn(1, 18),
+                        endSection = lineCompound.endSection.coerceIn(lineCompound.startSection.coerceIn(1, 18), 18),
+                        startWeek = lineCompound.weeks.startWeek,
+                        endWeek = lineCompound.weeks.endWeek,
+                        weeksSpec = lineCompound.weeks.weeksSpec,
+                        weekParity = lineCompound.weeks.parity
+                    )
+                )
+                idx++
+                continue
             }
 
             // 2. 检查是否为节次或周次行
-            val secRange = lineSecRange ?: parseSectionRange(line)
+            val secRange = lineSecRange
             val weekInfoInLine = parseWeekInfo(line)
             val hasDirectSec = secRange != null
             val hasExplicitWeek = Regex("\\d{1,2}\\s*(?:-|~|至|到)\\s*\\d{1,2}\\s*周").containsMatchIn(line) ||
                 Regex("\\d{1,2}\\s*周").containsMatchIn(line) ||
                 weekInfoInLine.weeksSpec.isNotBlank()
+
+            if (!hasDirectSec && !hasExplicitWeek && parseChineseDayOfWeek(line) == null && !isLikelyRoomToken(line)) {
+                val cleanCand = stripCourseCodeAndClassSuffix(line)
+                if (cleanCand.length in 2..36) {
+                    activeCardTitle = cleanCand
+                }
+            }
 
             // 仅当该行包含节次，或者该行包含周次且前面3行内均无节次行（防止将单纯周次行当作独立新课二次入库）时才触发课程块解析
             val hasPrecedingSec = (0 until idx).any { prevIdx ->
@@ -1191,7 +1459,7 @@ ${buildEmptyThemeTemplateJson()}
                     } ?: ParsedWeeks(1, 18, "", WeekParity.ALL)
                 }
 
-                var courseName = ""
+                var courseName = activeCardTitle
                 var room = "待定教室"
                 var teacher = ""
 
@@ -1199,7 +1467,7 @@ ${buildEmptyThemeTemplateJson()}
                     ln != line &&
                     parseSectionRange(ln) == null &&
                     !ln.contains("周") &&
-                    !ln.contains("学分") &&
+                    !isCourseMetaNoise(ln) &&
                     !ln.contains("考核") &&
                     !ln.contains("必修") &&
                     !ln.contains("选修") &&
@@ -1207,32 +1475,31 @@ ${buildEmptyThemeTemplateJson()}
                 }
 
                 for (cand in candidateLines) {
-                    val isRoom = cand.contains("楼") || cand.contains("教") || cand.contains("室") ||
-                        cand.contains("实") || cand.contains("机房") || cand.contains("中心") ||
-                        cand.contains("馆") || Regex("^[A-Za-z]\\d{2,4}").containsMatchIn(cand)
-
+                    val isRoom = isLikelyRoomToken(cand)
                     val isTeacher = cand.contains("教授") || cand.contains("讲师") || cand.contains("老师") ||
                         (cand.length in 2..4 && !isRoom && cand.all { it.isLetter() })
 
                     if (isRoom && room == "待定教室") {
-                        room = cand
+                        room = cand.removePrefix("@").trim()
                     } else if (isTeacher && teacher.isBlank()) {
                         teacher = cand
-                    } else if (courseName.isBlank() && cand.length in 2..30) {
-                        courseName = cand
+                    } else if (courseName.isBlank() && cand.length in 2..36) {
+                        courseName = stripCourseCodeAndClassSuffix(cand)
                     }
                 }
 
                 if (courseName.isBlank()) {
-                    val strippedLine = line
-                        .replace(Regex("(?:周|星期|礼拜)[一二三四五六日天七1-7]"), " ")
-                        .replace(Regex("(?:第|[\\[(（【])?\\d{1,2}\\s*(?:-|~)\\s*\\d{1,2}\\s*(?:节|[\\])）】])?"), " ")
-                        .replace(Regex("[\\[(（【]?\\d{1,2}\\s*(?:-|~)\\s*\\d{1,2}\\s*周[^\\]]*[\\])）】]?"), " ")
-                        .trim()
-                    courseName = if (strippedLine.length in 2..30) {
+                    val strippedLine = stripCourseCodeAndClassSuffix(
+                        line
+                            .replace(Regex("(?:周|星期|礼拜)[一二三四五六日天七1-7]"), " ")
+                            .replace(Regex("(?:第|[\\[(（【])?\\d{1,2}(?:\\s*小?节)?\\s*(?:-|~)\\s*\\d{1,2}\\s*(?:小?节|[\\])）】])?"), " ")
+                            .replace(Regex("[\\[(（【]?\\d{1,2}\\s*(?:-|~)\\s*\\d{1,2}\\s*周[^\\]]*[\\])）】]?"), " ")
+                            .trim()
+                    )
+                    courseName = if (strippedLine.length in 2..36) {
                         strippedLine
                     } else {
-                        candidateLines.firstOrNull() ?: "课程 #${rawCourses.size + 1}"
+                        candidateLines.firstOrNull()?.let { stripCourseCodeAndClassSuffix(it) } ?: "课程 #${rawCourses.size + 1}"
                     }
                 }
 
@@ -1620,7 +1887,7 @@ ${buildEmptyThemeTemplateJson()}
                     }
                 }
 
-                // 3. 通用兜底：含「周」的课表格子
+                // 3. 通用表格兜底：含「周」的课表格子（支持单元格内多个未带 "---" 的子卡片 div 拆分）
                 if (out.length === before) {
                     var tds = doc.querySelectorAll('td');
                     for (var ti = 0; ti < tds.length; ti++) {
@@ -1630,9 +1897,151 @@ ${buildEmptyThemeTemplateJson()}
                         if (t.length < 4 || t.indexOf('周') < 0) continue;
                         var gloc = locate(gtd);
                         if (!gloc || !gloc.day) continue;
-                        var gsegs = splitCellSegments(gtd.innerHTML);
-                        for (var gi = 0; gi < gsegs.length; gi++) {
-                            emit('generic', gloc.day, 0, 0, gloc.rowHeader, gloc.rowOrdinal, gsegs[gi]);
+                        var childCards = gtd.querySelectorAll('div, li, p, article');
+                        var directCards = [];
+                        for (var ci = 0; ci < childCards.length; ci++) {
+                            var cc = childCards[ci];
+                            if (cc.parentElement !== gtd) continue;
+                            var ct = txt(cc);
+                            if (ct.length >= 6 && ct.indexOf('周') >= 0 && ct.indexOf('节') >= 0) {
+                                directCards.push(cc);
+                            }
+                        }
+                        if (directCards.length >= 2) {
+                            for (var dci = 0; dci < directCards.length; dci++) {
+                                var csegs = splitCellSegments(directCards[dci].innerHTML);
+                                for (var csi = 0; csi < csegs.length; csi++) {
+                                    emit('generic', gloc.day, 0, 0, gloc.rowHeader, gloc.rowOrdinal, csegs[csi]);
+                                }
+                            }
+                        } else {
+                            var gsegs = splitCellSegments(gtd.innerHTML);
+                            for (var gi = 0; gi < gsegs.length; gi++) {
+                                emit('generic', gloc.day, 0, 0, gloc.rowHeader, gloc.rowOrdinal, gsegs[gi]);
+                            }
+                        }
+                    }
+                }
+
+                // 4. CSS Grid / Flex 列式卡片网格兜底（如 bkjw.uibe.edu.cn "当前学期课表" 等无 <table> 的现代教务页面）
+                if (out.length === before) {
+                    function hasCardHeaderAndSchedule(s) {
+                        var ls = String(s || '').split(/\n+/).map(function(x) { return x.replace(/\s+/g, ' ').trim(); }).filter(function(x) { return x.length > 0; });
+                        var hasWeek = false, hasSec = false, hasTitle = false;
+                        for (var li = 0; li < ls.length; li++) {
+                            var l = ls[li];
+                            var isScheduleLine = /\d.*(?:周|节|大节)/.test(l) || l.indexOf('单周') >= 0 || l.indexOf('双周') >= 0;
+                            if (isScheduleLine) {
+                                if (l.indexOf('周') >= 0) hasWeek = true;
+                                if (l.indexOf('节') >= 0) hasSec = true;
+                            } else if (l.length >= 2 && l.indexOf('选课人数') !== 0 && !/^\d{1,3}$/.test(l)) {
+                                hasTitle = true;
+                            }
+                        }
+                        return hasWeek && hasSec && hasTitle;
+                    }
+
+                    // 4.1 识别星期列头（按水平带聚类，取同一行包含最多不重复星期的列头）
+                    var headerCands = [];
+                    var allHeaderNodes = doc.querySelectorAll('div, span, th, li, p, h1, h2, h3, h4, strong, b, a, label');
+                    for (var hi = 0; hi < allHeaderNodes.length; hi++) {
+                        var hel = allHeaderNodes[hi];
+                        var ht = txt(hel).replace(/\s+/g, '');
+                        if (ht.length < 2 || ht.length > 16) continue;
+                        var hd = dayFromHeader(ht);
+                        if (!hd) continue;
+                        var childHasSame = false;
+                        var hKids = hel.children || [];
+                        for (var hk = 0; hk < hKids.length; hk++) {
+                            if (dayFromHeader(txt(hKids[hk])) === hd) { childHasSame = true; break; }
+                        }
+                        if (childHasSame) continue;
+                        var hr = hel.getBoundingClientRect();
+                        if (hr && hr.width > 12 && hr.height > 8) {
+                            headerCands.push({ day: hd, left: hr.left, right: hr.right, top: hr.top, bottom: hr.bottom, cx: (hr.left + hr.right) / 2, w: hr.width });
+                        }
+                    }
+
+                    var bestBand = [];
+                    for (var b1 = 0; b1 < headerCands.length; b1++) {
+                        var band = [];
+                        var seenDays = {};
+                        for (var b2 = 0; b2 < headerCands.length; b2++) {
+                            if (Math.abs(headerCands[b2].top - headerCands[b1].top) <= 36) {
+                                if (!seenDays[headerCands[b2].day]) {
+                                    seenDays[headerCands[b2].day] = true;
+                                    band.push(headerCands[b2]);
+                                }
+                            }
+                        }
+                        if (band.length > bestBand.length) bestBand = band;
+                    }
+
+                    if (bestBand.length >= 3) {
+                        bestBand.sort(function(a, b) { return a.cx - b.cx; });
+                        var headerBottom = 0;
+                        for (var bi = 0; bi < bestBand.length; bi++) {
+                            if (bestBand[bi].bottom > headerBottom) headerBottom = bestBand[bi].bottom;
+                        }
+                        var colDistSum = 0, colDistCnt = 0;
+                        for (var ci2 = 1; ci2 < bestBand.length; ci2++) {
+                            var gap = bestBand[ci2].cx - bestBand[ci2 - 1].cx;
+                            if (gap > 20) { colDistSum += gap; colDistCnt++; }
+                        }
+                        var avgColW = colDistCnt > 0 ? (colDistSum / colDistCnt) : Math.max(bestBand[0].w, 40);
+
+                        // 4.2 在列头下方筛选最内层且同时包含课程标题与周/节排课信息的单门课卡片
+                        var cardCands = doc.querySelectorAll('div, li, article, section, a, p');
+                        var matchedCards = [];
+                        for (var mi = 0; mi < cardCands.length; mi++) {
+                            var cel = cardCands[mi];
+                            var cr = cel.getBoundingClientRect();
+                            if (!cr || cr.width <= 16 || cr.height <= 16 || cr.width > avgColW * 1.65) continue;
+                            if (cr.top < headerBottom - 16) continue;
+                            var ct = htmlToText(cel.innerHTML);
+                            if (ct.length < 4 || ct.length > 360 || ct.indexOf('周') < 0 || ct.indexOf('节') < 0) continue;
+                            if (!hasCardHeaderAndSchedule(ct)) continue;
+
+                            var hasInnerCard = false;
+                            var innerNodes = cel.querySelectorAll('div, li, article, section, a, p');
+                            for (var ii = 0; ii < innerNodes.length; ii++) {
+                                var ic = innerNodes[ii];
+                                if (hasCardHeaderAndSchedule(htmlToText(ic.innerHTML))) {
+                                    hasInnerCard = true;
+                                    break;
+                                }
+                            }
+                            if (!hasInnerCard) matchedCards.push({ el: cel, rect: cr });
+                        }
+
+                        var emittedEls = [];
+                        for (var ei = 0; ei < matchedCards.length; ei++) {
+                            var item = matchedCards[ei];
+                            var dup = false;
+                            for (var pe = 0; pe < emittedEls.length; pe++) {
+                                if (emittedEls[pe].contains(item.el) || item.el.contains(emittedEls[pe])) { dup = true; break; }
+                            }
+                            if (dup) continue;
+
+                            var cardCx = (item.rect.left + item.rect.right) / 2;
+                            var bestDay = 0;
+                            var bestScore = -999999;
+                            for (var colI = 0; colI < bestBand.length; colI++) {
+                                var col = bestBand[colI];
+                                var overlap = Math.min(item.rect.right, col.right) - Math.max(item.rect.left, col.left);
+                                var dist = Math.abs(cardCx - col.cx);
+                                if (overlap > 4 || dist <= avgColW * 0.72) {
+                                    var score = (overlap > 0 ? overlap * 10 : 0) - dist;
+                                    if (score > bestScore) { bestScore = score; bestDay = col.day; }
+                                }
+                            }
+                            if (bestDay >= 1 && bestDay <= 7) {
+                                emittedEls.push(item.el);
+                                var fsegs = splitCellSegments(item.el.innerHTML);
+                                for (var fi = 0; fi < fsegs.length; fi++) {
+                                    emit('flexgrid', bestDay, 0, 0, '', -1, fsegs[fi]);
+                                }
+                            }
                         }
                     }
                 }
@@ -1652,7 +2061,12 @@ ${buildEmptyThemeTemplateJson()}
 
             function checkAndNotify(text) {
                 if (!text || text.length < 30) return;
-                if (text.indexOf('kcmc') >= 0 || text.indexOf('courseName') >= 0 || text.indexOf('kbList') >= 0 || text.indexOf('lessonList') >= 0) {
+                var head = text.replace(/^\s+/, '').charAt(0);
+                if (head !== '{' && head !== '[') return;
+                if (text.indexOf('kcmc') >= 0 || text.indexOf('courseName') >= 0 ||
+                    text.indexOf('kbList') >= 0 || text.indexOf('lessonList') >= 0 ||
+                    text.indexOf('skxq') >= 0 || text.indexOf('ksjc') >= 0 ||
+                    text.indexOf('kcms') >= 0 || text.indexOf('jxdd') >= 0) {
                     if (window.ClassTrackBridge && window.ClassTrackBridge.onCaptureTimetableJson) {
                         window.ClassTrackBridge.onCaptureTimetableJson(text);
                     }

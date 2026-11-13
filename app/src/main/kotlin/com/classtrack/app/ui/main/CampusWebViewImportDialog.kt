@@ -87,14 +87,10 @@ fun CampusWebViewImportDialog(
     var activeLoadedUrl by remember { mutableStateOf(initialUrl) }
     var pageTitle by remember { mutableStateOf("内置智能导课浏览器") }
     var loadProgress by remember { mutableIntStateOf(0) }
-    var useDesktopUa by remember { mutableStateOf(true) }
-    var showSchoolSelector by remember { mutableStateOf(initialUrl.isBlank()) }
-    var detectedCourseCount by remember { mutableIntStateOf(0) }
-    var capturedRawJson by remember { mutableStateOf<String?>(null) }
-    var webViewRef by remember { mutableStateOf<WebView?>(null) }
-
     fun isDesktopPreferred(url: String): Boolean {
         val lower = url.lowercase()
+        // bkjw.uibe.edu.cn 属于新版移动端/响应式课表页面，默认走手机视口以完整展示当前学期课表卡片
+        if (lower.contains("bkjw.uibe.edu.cn")) return false
         return lower.contains("uibe.edu.cn") ||
             lower.contains("jsxsd") ||
             lower.contains("zhjw") ||
@@ -102,6 +98,12 @@ fun CampusWebViewImportDialog(
             lower.contains("bjfu.edu.cn") ||
             lower.contains("jwxt")
     }
+
+    var useDesktopUa by remember { mutableStateOf(if (initialUrl.isNotBlank()) isDesktopPreferred(initialUrl) else true) }
+    var showSchoolSelector by remember { mutableStateOf(initialUrl.isBlank()) }
+    var detectedCourseCount by remember { mutableIntStateOf(0) }
+    var capturedRawJson by remember { mutableStateOf<String?>(null) }
+    var webViewRef by remember { mutableStateOf<WebView?>(null) }
 
     val navigateToUrl: (String) -> Unit = { rawUrl ->
         val trimmed = rawUrl.trim().replace("newjwxt.bjfu.cn", "newjwxt.bjfu.edu.cn")
@@ -111,10 +113,9 @@ fun CampusWebViewImportDialog(
                 trimmed.contains("newjwxt.bjfu.edu.cn") -> "http://$trimmed"
                 else -> "https://$trimmed"
             }
-            if (isDesktopPreferred(normalized)) {
-                useDesktopUa = true
-                webViewRef?.settings?.userAgentString = DESKTOP_USER_AGENT
-            }
+            val preferDesktop = isDesktopPreferred(normalized)
+            useDesktopUa = preferDesktop
+            webViewRef?.settings?.userAgentString = if (preferDesktop) DESKTOP_USER_AGENT else null
             addressInput = normalized
             activeLoadedUrl = normalized
             showSchoolSelector = false
@@ -488,6 +489,8 @@ fun CampusWebViewImportDialog(
                                             CookieManager.getInstance().flush()
                                             view?.evaluateJavascript(CourseImporter.eduSystemAjaxHookJs, null)
                                             probePageTimetable(view)
+                                            // 兼容 SPA/Vue 异步渲染的现代教务课表（如 bkjw.uibe.edu.cn），延迟复探一次
+                                            view?.postDelayed({ probePageTimetable(view) }, 1500L)
                                         }
 
                                         @SuppressLint("WebViewClientOnReceivedSslError")
