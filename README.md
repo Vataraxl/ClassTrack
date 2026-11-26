@@ -1,77 +1,92 @@
-# 课轨 · ClassTrack 🎵
+# 课轨 (ClassTrack)
 
-> **让课表如音乐专辑般流动。**
-> 专为大学生打造的高颜值、120Hz 丝滑流体美学与音乐播放器质感课表应用。
+一个纯本地运行、无广告的 Android 大学课表应用。界面采用音乐专辑与黑胶唱片的配色思路，重点做了高校教务系统导课兼容、跨节长课排版，以及状态栏/通知栏的上课实时提醒。
 
----
+所有课表和设置都保存在设备本地（SQLite 与 SharedPreferences），不需要注册账号，也不会上传课表数据。
 
-## ✨ 核心特性
+## 功能概览
 
-### 1. 🎨 7 款内置多元流派音乐人专属主题
-- **华语流行**：周杰伦 · 《叶惠美 / 范特西》（复古琥珀摩卡金与古典羊皮纸暖调）
-- **华语 R&B**：陶喆 · 《黑色柳丁》（美式 R&B 鲜明柳丁橙与曜石黑深邃撞色）
-- **欧美流行**：Taylor Swift · 《Midnights / Lover》（午夜星辰靛蓝与浪漫霞光粉）
-- **K-Pop**：aespa · 《Armageddon / Whiplash》（液态钛银银铬与赛博电光紫）
-- **日音 J-Pop**：
-  - ずっと真夜中でいいのに。(ZTMY) · 【真夜星轨】（录音室荧光薄荷与珊瑚霓虹）
-  - ヨルシカ (Yorushika) · 【晴空夏草】（皇家晴空蓝与春泥棒珊瑚朱红）
-  - 藤井 風 (Fujii Kaze) · 【落日微风】（落日赤陶橘与旅路松针绿）
-- **高自由度定制**：支持导入/导出 JSON 自定义主题，可一键发送空值模板给 DeepSeek 等 AI 辅助生成配色。
+### 课表视图与作息管理
+- **周课表网格**：支持左右滑动切换周次，非当前周浏览时可一键回到本周；自动合并连堂课（包括 3 节及以上的实验课、专业长课），处理单双周与离散周次。
+- **自定义作息**：支持 6–16 节每日课表长度调整，可单独修改每节课上下课时刻，或按间隔顺延后续节次。
+- **桌面小组件**：提供黑胶样式桌面 Widget，在主屏幕直接查看当天待上课程。
 
-### 2. 💽 全局「黑胶唱片柜」交互抽屉 (`Vinyl Theme Cabinet`)
-- 拟物黑胶唱机展台，动态同心声槽旋转黑胶碟片 (`NOW SPINNING`)。
-- 支持按 **全部 / 华语 / 欧美 / K-Pop / 日音 / 自定义** 流派快速筛选切碟。
-- 在**顶栏主题胶囊**、**底部歌词条「换碟」按钮**与**主题工作台**均可一键随时调出。
+### 教务导课与数据备份
+- **内置教务网页抓取**：通过应用内 WebView 登录学校教务系统后直接提取课表，针对二维表格跨行合并、同格多门课、非补零节次等常见教务页面格式做了兼容。目前已预置对外经济贸易大学（综合教务与 `bkjw` 新端）、北京林业大学、中国农业大学、北邮、北航、北理工、人大、北师大、浙大、武大、复旦、上交、南大等高校入口，支持强智、正方/新正方、青果、树维/URP、金智等常见教务系统，也可手动输入任意教务网址。
+- **多格式导入导出**：支持导出完整 JSON 备份、生成分享口令，也支持粘贴 CSV 文本导入，或借助提示词让大模型将课表截图/文本整理为标准 JSON 后导入。
 
-### 3. ⚡ 120Hz 单层瑞士网格极简课表
-- 告别笨重的百个卡片节点嵌套，采用**单层 Canvas 测量与精确定位渲染**，滑动跟手率与帧率达到原生 120Hz 满帧。
-- 智能横向分页滑周（Pager），支持当前周一键直达、非当前周快速翻阅。
-- 底部嵌入滚动式**音乐人代表作歌词状态条**，轻触即切下一首经典曲目。
+### 主题与界面风格
+- **两种界面材质**：支持「经典纯净」（实色卡片与细边框）和「液态玻璃」（半透磨砂背景与漫射色块）切换。
+- **7 套内置音乐人主题**：
+  - 华语：周杰伦（叶惠美·范特西）、陶喆（黑色柳丁）
+  - 欧美：Taylor Swift（Midnights / Lover）
+  - K-Pop：aespa（Armageddon / Whiplash）
+  - 日音：ずっと真夜中でいいのに。、ヨルシカ、藤井 風
+- **唱片柜抽屉与歌词栏**：可按流派筛选切换主题，底栏附带对应歌手的歌词短句，点击可切换下一条；支持通过 JSON 导入自定义配色主题。
 
-### 4. 🚀 智能教务一键导课算法
-- 覆盖**强智、正方/新正方、青果、树维/URP、金智**等主流高校教务系统。
-- 智能识别与自愈：智能解析多周次合并课程、同课程合并跨节（如 3 节加长课连贯合并），容错处理非标准时间字段与脏数据。
-- 支持教务系统内置 WebView 登录抓取、JSON/CSV 文本粘贴与分享口令导入。
+### 上课提醒与状态栏实况通知
+- **定时调度**：基于 `AlarmManager` 排定课前提醒、上课切换与下课收起节点，支持提前 10 / 15 / 20 / 30 分钟提醒。
+- **两种通知形态**：
+  - **点阵进度卡**：首行展示时间与教室，配合 28 点横向进度条显示当前课程进度，支持在通知上点击「已到教室」直接收起。
+  - **状态栏实况胶囊**：适配 Android 16 实况通知及部分国产系统顶栏胶囊协议（ColorOS 流体云、OriginOS 原子岛、HyperOS 焦点通知、MagicOS 实况窗）。
+- **后台自检与穿戴同步**：设置页内置通知权限、精确闹钟、电池优化白名单与自启动引导检查，并支持将课前提醒同步至智能手表或手环。
 
-### 5. 🪐 系统级流体云胶囊与实况通知
-- 深度适配 **OPPO / OnePlus ColorOS 流体云实况胶囊** 与 Android 状态栏常驻通知。
-- 精准课前倒计时与上课状态轮转（定宽平滑滚动，告别文本折行与重复堆砌）。
-- 桌面拟物黑胶小组件（Widget），主屏幕随时感知下一堂课与当周课轨。
+## 开发环境与构建
 
----
+### 环境要求
+- JDK 21
+- Android SDK（`compileSdk 36`，`minSdk 26`）
+- Gradle 9.1（仓库自带 Wrapper）
 
-## 🛠️ 技术架构
+### 常用命令
 
-- **UI 框架**：Jetpack Compose (Material 3) + 纯净光学液态玻璃修饰符 (`liquidGlassSurface`)
-- **语言**：Kotlin 1.9+ (协程 Coroutines + StateFlow 响应式状态容器)
-- **持久化**：本地安全 JSON 配置存储与自愈迁移机制
-- **通知与系统胶囊**：NotificationManager + RemoteViews + ColorOS Fluid Cloud API
-- **架构模式**：MVVM (Model-View-ViewModel) + 统一响应式 Repository 仓储模式
+克隆仓库并构建 Debug 安装包：
 
----
-
-## 📦 本地编译与构建
-
-### 前置要求
-1. **JDK 17+**
-2. **Android SDK Platform 34+**
-3. **Gradle 8.7+**
-
-### 构建 Debug 安装包
 ```bash
-# 克隆仓库
-git clone <your-repo-url>
+git clone https://github.com/Vataraxl/ClassTrack.git
 cd ClassTrack
-
-# 编译 Debug APK
 ./gradlew assembleDebug
-
-# 构建产物位于：
-# app/build/outputs/apk/debug/app-debug.apk
 ```
 
----
+生成的 Debug APK 位于 `app/build/outputs/apk/debug/app-debug.apk`。
 
-## 📄 开源许可证
+运行本地单元测试：
 
-本项目采用 [MIT License](LICENSE) 授权许可。
+```bash
+./gradlew testDebugUnitTest
+```
+
+### 正式签名打包（可选）
+
+如需构建带个人签名的 Release 包，可在项目根目录新建 `keystore.properties`（已被 `.gitignore` 忽略，不会提交到仓库）：
+
+```properties
+storeFile=keystore/classtrack-release.jks
+storePassword=你的密钥库密码
+keyAlias=你的密钥别名
+keyPassword=你的密钥密码
+```
+
+然后执行：
+
+```bash
+./gradlew assembleRelease
+```
+
+产物位于 `app/build/outputs/apk/release/app-release.apk`。未配置 `keystore.properties` 时不影响常规克隆与调试编译。
+
+## 目录结构
+
+```text
+app/src/main/kotlin/com/classtrack/app/
+├── data/          # SQLite 数据库、课表解析导入器 (CourseImporter / TimetableCellParser)、Repository
+├── system/        # 闹钟排程 (CourseAlarmScheduler)、实况通知与流体云适配、前台保活服务
+├── ui/
+│   ├── main/      # 周课表网格、导课与主题工作台、内置教务 WebView、系统设置页
+│   └── theme/     # 7 套预设色板、字体排版、液态玻璃绘制修饰符与转场动效
+└── widget/        # 桌面 AppWidget 小组件
+```
+
+## 开源协议
+
+[MIT License](LICENSE)

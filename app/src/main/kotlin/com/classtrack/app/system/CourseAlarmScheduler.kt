@@ -319,9 +319,9 @@ object CourseAlarmScheduler {
         val summaryPrefix = buildString {
             append(
                 when (nextWakeMilestone.eventType) {
-                    EVENT_CLASS_START -> "下次准点开课切换："
-                    EVENT_CLASS_END -> "下次下课自动收起："
-                    else -> "下次自动课前提醒："
+                    EVENT_CLASS_START -> "下次开课切换："
+                    EVENT_CLASS_END -> "下次下课收起："
+                    else -> "下次课前提醒："
                 }
             )
             append(formatDayLabel(now.toLocalDate(), nextWakeMilestone.triggerTime.toLocalDate()))
@@ -330,21 +330,21 @@ object CourseAlarmScheduler {
             append(" · ")
             append(nextWakeMilestone.course.name)
             if (nextWakeMilestone.course.room.isNotBlank()) {
-                append(" (@${nextWakeMilestone.course.room})")
+                append(" (${nextWakeMilestone.course.room})")
             }
         }
 
         val diagnosticSuffix = buildList {
-            if (!readiness.areNotificationsEnabled) add("通知权限未开")
-            if (!readiness.canScheduleExactAlarms) add("未授权精确闹钟(可能延迟)")
-            if (!readiness.isIgnoringBatteryOptimizations) add("建议关闭电池优化防墓碑")
-            if (primaryAlarmClockTarget != null) add("已启用闹钟级穿透")
+            if (!readiness.areNotificationsEnabled) add("通知未开启")
+            if (!readiness.canScheduleExactAlarms) add("未授权精确闹钟")
+            if (!readiness.isIgnoringBatteryOptimizations) add("建议允许后台运行")
+            if (primaryAlarmClockTarget != null) add("高优先级唤醒已启用")
         }.joinToString(" · ")
 
         _nextReminderInfo.value = if (diagnosticSuffix.isBlank()) {
             summaryPrefix
         } else {
-            "$summaryPrefix [$diagnosticSuffix]"
+            "$summaryPrefix（$diagnosticSuffix）"
         }
     }
 

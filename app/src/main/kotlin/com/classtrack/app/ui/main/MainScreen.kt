@@ -41,6 +41,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.CircleShape
@@ -74,6 +75,7 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -348,6 +350,7 @@ fun MainScreen(
                                                 onUpdateTimeSlot = { sec, start, end ->
                                                     viewModel.updateSingleTimeSlot(sec, start, end)
                                                 },
+                                                onUpdateAllTimeSlots = { viewModel.updateTimeSlots(it) },
                                                 onResetTimeSlots = { viewModel.resetTimeSlotsToDefault() },
                                                 onToggleFluidCloud = { viewModel.setFluidCloudEnabled(it) },
                                                 onToggleWatchBridge = { viewModel.setWatchBridgeEnabled(it) },
@@ -583,7 +586,9 @@ private fun ClassTrackMinimalTopBar(
                 Row(
                     verticalAlignment = Alignment.CenterVertically,
                     horizontalArrangement = Arrangement.spacedBy(8.dp),
-                    modifier = Modifier.padding(vertical = 2.dp)
+                    modifier = Modifier
+                        .weight(1f, fill = false)
+                        .padding(top = 2.dp, bottom = 2.dp, end = 8.dp)
                 ) {
                     Text(
                         text = when (activeTab) {
@@ -597,6 +602,7 @@ private fun ClassTrackMinimalTopBar(
                         letterSpacing = (-0.4).sp,
                         maxLines = 1,
                         softWrap = false,
+                        overflow = TextOverflow.Ellipsis,
                         color = MaterialTheme.colorScheme.onBackground
                     )
                     Surface(
@@ -656,12 +662,14 @@ private fun ClassTrackMinimalTopBar(
                             spinning = false
                         )
                         Text(
-                            text = themeDisplayName.take(5),
+                            text = themeDisplayName,
                             fontSize = 11.sp,
                             fontWeight = FontWeight.SemiBold,
                             maxLines = 1,
                             softWrap = false,
-                            color = MaterialTheme.colorScheme.onSurface
+                            overflow = TextOverflow.Ellipsis,
+                            color = MaterialTheme.colorScheme.onSurface,
+                            modifier = Modifier.widthIn(max = 88.dp)
                         )
                         Text(
                             text = "▾",

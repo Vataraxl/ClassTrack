@@ -367,11 +367,11 @@ enum class NotificationCardStyle(
 ) {
     DOT_CARD(
         displayName = "极简点阵流体卡",
-        description = "高清点阵时间轴 · 时间地点首行聚焦 · 紧凑交互胶囊（推荐）"
+        description = "28点进度 · 首行焦点"
     ),
     LIVE_CAPSULE(
         displayName = "状态栏实况胶囊",
-        description = "Android 16 原生药丸胶囊（显示在状态栏左上角时钟旁）"
+        description = "顶部状态栏药丸胶囊"
     )
 }
 

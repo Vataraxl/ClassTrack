@@ -253,6 +253,11 @@ class MainScreenViewModel(application: Application) : AndroidViewModel(applicati
         _toastMessage.value = "已更新第 $section 节时间：$startTime - $endTime"
     }
 
+    fun updateTimeSlots(slots: List<TimeSlot>) {
+        repository.updateAllTimeSlots(slots, maxSections.value)
+        _toastMessage.value = "已更新作息时间表"
+    }
+
     fun resetTimeSlotsToDefault() {
         repository.resetTimeSlotsToDefault()
         _toastMessage.value = "已恢复默认 12 节作息时间"
@@ -405,20 +410,20 @@ class MainScreenViewModel(application: Application) : AndroidViewModel(applicati
     fun setAlarmClockPriorityEnabled(enabled: Boolean) {
         repository.setAlarmClockPriorityEnabled(enabled)
         _toastMessage.value = if (enabled) {
-            "已开启强力闹钟级唤醒（穿透省电冻结与墓碑）"
+            "已开启高优先级准时唤醒"
         } else {
-            "已切换为标准精确闹钟模式"
+            "已切换为标准定时提醒模式"
         }
     }
 
     fun testWatchBridge(context: Context) {
         ColorOsFluidCloudHelper.sendWatchTestNotification(context)
-        _toastMessage.value = "已向 OPPO Watch X2 发送即时测试通知与手腕振动"
+        _toastMessage.value = "已向配对手表 / 手环发送测试提醒与振动"
     }
 
     fun refreshAutomaticAlarms(context: Context) {
         CourseAlarmScheduler.rescheduleAll(context)
-        _toastMessage.value = "已重新规划全自动课前 / 上课 / 下课 RTC 闹钟链"
+        _toastMessage.value = "已刷新后续课程提醒计划"
     }
 
     fun triggerFluidCloudLivePreview(
