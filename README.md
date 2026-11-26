@@ -1,5 +1,7 @@
 # 课轨 (ClassTrack)
 
+🌐 **在线介绍页**：[https://vataraxl.github.io/ClassTrack/](https://vataraxl.github.io/ClassTrack/)
+
 一个纯本地运行、无广告的 Android 大学课表应用。界面采用音乐专辑与黑胶唱片的配色思路，重点做了高校教务系统导课兼容、跨节长课排版，以及状态栏/通知栏的上课实时提醒。
 
 所有课表和设置都保存在设备本地（SQLite 与 SharedPreferences），不需要注册账号，也不会上传课表数据。

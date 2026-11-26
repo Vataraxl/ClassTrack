@@ -1,0 +1,625 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>课轨 · ClassTrack — 120Hz 丝滑流体美学与音乐黑胶质感的高校课表 Android 应用</title>
+  <meta name="description" content="纯本地运行、零广告的 Android 大学课表应用。融合 7 套音乐人专辑色板、液态玻璃双材质、全国高校教务 WebView 导课与 Android 16 / 国产系统状态栏实况胶囊提醒。">
+  <meta property="og:title" content="课轨 · ClassTrack — 黑胶质感与流体美学的大学课表">
+  <meta property="og:description" content="100% 本地 SQLite 持久化 · 7 套音乐人色板 · 内置全国高校教务导课 · 状态栏实况胶囊提醒。">
+  <meta property="og:type" content="website">
+  <meta property="og:url" content="https://vataraxl.github.io/ClassTrack/">
+  <link rel="icon" type="image/svg+xml" href="./favicon.svg">
+  <link rel="stylesheet" href="./styles.css">
+</head>
+<body>
+  <header class="site-header" id="site-header">
+    <div class="header-inner">
+      <a class="brand-link" href="#top" aria-label="课轨 ClassTrack 返回顶部">
+        <img class="brand-icon" src="./favicon.svg" alt="" width="30" height="30">
+        <span>课轨 ClassTrack</span>
+        <span class="brand-tag">v1.0.0 · MIT</span>
+      </a>
+
+      <nav class="main-nav" aria-label="主导航">
+        <a href="#preview">交互预览</a>
+        <a href="#features">核心功能</a>
+        <a href="#albums">专辑色板</a>
+        <a href="#portals">高校兼容</a>
+        <a href="#workshop">构建工坊</a>
+      </nav>
+
+      <div class="header-actions">
+        <button type="button" class="pill-btn pill-btn--compact pill-btn--ghost" id="motion-toggle">
+          暂停动效
+        </button>
+        <a class="pill-btn pill-btn--compact pill-btn--secondary header-github-btn"
+           href="https://github.com/Vataraxl/ClassTrack" target="_blank" rel="noopener noreferrer">
+          GitHub ↗
+        </a>
+        <a class="pill-btn pill-btn--compact pill-btn--primary header-cta-primary" href="#workshop">
+          立即获取 ↓
+        </a>
+        <button type="button" class="mobile-menu-btn" id="mobile-menu-btn" aria-label="打开导航菜单" aria-controls="mobile-drawer" aria-expanded="false">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true">
+            <line x1="4" y1="7" x2="20" y2="7"/>
+            <line x1="4" y1="12" x2="20" y2="12"/>
+            <line x1="4" y1="17" x2="20" y2="17"/>
+          </svg>
+        </button>
+      </div>
+    </div>
+  </header>
+
+  <dialog class="mobile-drawer" id="mobile-drawer" aria-label="移动端导航菜单">
+    <div class="mobile-drawer-head">
+      <strong>导航菜单</strong>
+      <button type="button" class="announcement-close" id="mobile-drawer-close" aria-label="关闭菜单">✕</button>
+    </div>
+    <div class="mobile-drawer-links">
+      <a href="#preview">交互预览</a>
+      <a href="#features">核心功能</a>
+      <a href="#albums">专辑色板</a>
+      <a href="#portals">高校兼容</a>
+      <a href="#workshop">构建工坊</a>
+    </div>
+    <div class="mobile-drawer-actions">
+      <a class="pill-btn pill-btn--primary" href="#workshop">源码构建与获取 ↓</a>
+      <a class="pill-btn pill-btn--secondary" href="https://github.com/Vataraxl/ClassTrack" target="_blank" rel="noopener noreferrer">访问 GitHub 仓库 ↗</a>
+    </div>
+  </dialog>
+
+  <main id="top">
+    <div class="announcement-wrap">
+      <div class="announcement-bar" id="announcement-bar" role="region" aria-label="开源版本公告">
+        <span class="announcement-badge">OPEN SOURCE</span>
+        <span class="announcement-text">
+          课轨 ClassTrack v1.0.0 现已开源 · 纯本地 SQLite · 适配 Android 16 实况通知与 ColorOS 流体云
+        </span>
+        <a class="announcement-link" href="https://github.com/Vataraxl/ClassTrack" target="_blank" rel="noopener noreferrer">
+          查看仓库 →
+        </a>
+        <button type="button" class="announcement-close" id="announcement-close" aria-label="关闭公告">✕</button>
+      </div>
+    </div>
+
+    <!-- Hero Section -->
+    <section class="hero-section" aria-labelledby="hero-heading">
+      <canvas class="particle-canvas" id="hero-canvas" data-theme="hero" aria-hidden="true"></canvas>
+      <div class="hero-content">
+        <div class="hero-brand-pill">
+          <img src="./favicon.svg" alt="" width="24" height="24">
+          <span>Android · Jetpack Compose · 120Hz</span>
+        </div>
+
+        <h1 class="hero-title" id="hero-heading">
+          以 120Hz 流体与黑胶质感，<br>重塑你的大学课表体验
+        </h1>
+
+        <p class="hero-subtitle">
+          100% 本地 SQLite 零云端上传 · 7 套音乐人专辑色板 · 内置全国 17+ 高校教务导课 · 28 点阵流体进度卡与顶栏实况胶囊提醒
+        </p>
+
+        <div class="hero-cta-row">
+          <a class="pill-btn pill-btn--primary" href="#workshop">
+            获取安装包 / 源码构建 ↓
+          </a>
+          <a class="pill-btn pill-btn--secondary" href="https://github.com/Vataraxl/ClassTrack" target="_blank" rel="noopener noreferrer">
+            在 GitHub 查看源码 ↗
+          </a>
+        </div>
+
+        <div class="hero-spectrum-switcher" role="group" aria-label="切换背景粒子星环色板">
+          <span class="spectrum-label">粒子声轨光谱</span>
+          <button type="button" class="spectrum-chip is-active" data-spectrum="antigravity">
+            <span class="spectrum-dot" style="background: linear-gradient(135deg, #2c64ed, #f84242, #ffcf03);"></span>
+            Antigravity 光谱
+          </button>
+          <button type="button" class="spectrum-chip" data-spectrum="ZTMY">
+            <span class="spectrum-dot" style="background: #10E898;"></span>
+            真夜霓虹
+          </button>
+          <button type="button" class="spectrum-chip" data-spectrum="JAY_CHOU">
+            <span class="spectrum-dot" style="background: #B45309;"></span>
+            叶惠美·范特西
+          </button>
+          <button type="button" class="spectrum-chip" data-spectrum="DAVID_TAO">
+            <span class="spectrum-dot" style="background: #FF6B1A;"></span>
+            黑色柳丁
+          </button>
+          <button type="button" class="spectrum-chip" data-spectrum="AESPA">
+            <span class="spectrum-dot" style="background: #C084FC;"></span>
+            超新星金属
+          </button>
+        </div>
+      </div>
+    </section>
+
+    <!-- 36px Rounded Interactive Theater -->
+    <section class="theater-section reveal-on-scroll" id="preview" aria-labelledby="preview-heading">
+      <h2 class="visually-hidden" id="preview-heading">课轨 ClassTrack 实时交互预览台</h2>
+      <div class="theater-frame" id="theater-frame" data-preview-tone="dark">
+        <div class="theater-aura" aria-hidden="true"></div>
+        <div class="floating-cursor-pill" id="cursor-pill" aria-hidden="true">♪ 实时交互预览台</div>
+
+        <div class="theater-toolbar">
+          <div class="toolbar-group">
+            <div class="segmented-control" role="group" aria-label="界面材质切换">
+              <button type="button" class="seg-btn is-active" data-ui-mode="glass">液态玻璃 Liquid Glass</button>
+              <button type="button" class="seg-btn" data-ui-mode="classic">经典纯净 Classic Pure</button>
+            </div>
+          </div>
+
+          <div class="toolbar-group" id="preview-theme-bar" role="group" aria-label="预览台音乐人主题"></div>
+        </div>
+
+        <div class="theater-grid">
+          <!-- Phone Mockup -->
+          <div class="phone-shell" id="phone-shell" data-ui-style="glass" data-tone="dark">
+            <div class="phone-status-bar">
+              <span>09:38</span>
+              <div class="live-capsule" id="live-capsule">
+                <span class="capsule-pulse"></span>
+                <span id="capsule-text">高等数学 · 12 分钟后博学楼 B302</span>
+              </div>
+              <span>5G · 120Hz</span>
+            </div>
+
+            <div class="phone-header-row">
+              <div class="phone-week-meta">
+                <div class="mini-vinyl" aria-hidden="true"></div>
+                <div>
+                  <div class="phone-week-title">第 8 周 · 本周课轨</div>
+                  <div class="phone-album-badge" id="phone-album-badge">ZTMY · MIDNIGHT</div>
+                </div>
+              </div>
+              <span class="phone-material-pill" id="phone-material-pill">LIQUID GLASS</span>
+            </div>
+
+            <div class="schedule-grid" id="schedule-grid" aria-label="周课表示例网格">
+              <div></div>
+              <div class="grid-day-head">周一</div>
+              <div class="grid-day-head">周二</div>
+              <div class="grid-day-head is-today">周三</div>
+              <div class="grid-day-head">周四</div>
+              <div class="grid-day-head">周五</div>
+
+              <div class="grid-sec-num" style="grid-row: 2;">01</div>
+              <div class="grid-sec-num" style="grid-row: 3;">02</div>
+              <div class="grid-sec-num" style="grid-row: 4;">03</div>
+              <div class="grid-sec-num" style="grid-row: 5;">04</div>
+              <div class="grid-sec-num" style="grid-row: 6;">05</div>
+              <div class="grid-sec-num" style="grid-row: 7;">06</div>
+
+              <div class="course-block" data-slot="0" style="grid-column: 2; grid-row: 2 / span 2;">
+                <strong>微积分 A (II)</strong>
+                <span class="course-meta">求是楼 204<span class="course-badge">01-02节</span></span>
+              </div>
+              <div class="course-block" data-slot="1" style="grid-column: 4; grid-row: 2 / span 3;">
+                <strong>物理实验长课</strong>
+                <span class="course-meta">实验楼 401<span class="course-badge">3 节连堂</span></span>
+              </div>
+              <div class="course-block" data-slot="2" style="grid-column: 5; grid-row: 2 / span 2;">
+                <strong>数据结构</strong>
+                <span class="course-meta">宁远 312<span class="course-badge">单周</span></span>
+              </div>
+              <div class="course-block" data-slot="3" style="grid-column: 3; grid-row: 4 / span 2;">
+                <strong>计量经济学</strong>
+                <span class="course-meta">博学 B302<span class="course-badge">03-04节</span></span>
+              </div>
+              <div class="course-block" data-slot="4" style="grid-column: 6; grid-row: 3 / span 2;">
+                <strong>设计心理学</strong>
+                <span class="course-meta">诚信 410<span class="course-badge">2,6,8-18周</span></span>
+              </div>
+              <div class="course-block" data-slot="5" style="grid-column: 2; grid-row: 6 / span 2;">
+                <strong>大学英语进阶</strong>
+                <span class="course-meta">科研楼 108<span class="course-badge">05-06节</span></span>
+              </div>
+              <div class="course-block" data-slot="1" style="grid-column: 4; grid-row: 6 / span 2;">
+                <strong>算法设计与分析</strong>
+                <span class="course-meta">知行 205<span class="course-badge">05-06节</span></span>
+              </div>
+            </div>
+
+            <button type="button" class="lyric-bar" id="lyric-bar" aria-label="点击切换下一句代表作歌词">
+              <div class="lyric-main">
+                <div class="lyric-song" id="lyric-song">♪ 秒針を噛む · 深夜电台 Track 01</div>
+                <div class="lyric-line" id="lyric-line">このまま奪って隠して忘れたい、分かり合う○と×もなくて。</div>
+              </div>
+              <span class="lyric-hint">点击切歌 ↻</span>
+            </button>
+          </div>
+
+          <!-- Companion Side Cards -->
+          <div class="theater-side">
+            <div class="companion-card">
+              <div class="companion-eyebrow">28 点阵极简流体进度卡 · 实时交互</div>
+              <div class="dot-notif-card" id="dot-notif-card">
+                <div class="dot-notif-top">
+                  <div>
+                    <div class="dot-notif-title" id="notif-title">正在进行 · 物理实验长课</div>
+                    <div class="dot-notif-sub" id="notif-sub">09:50–12:15 · 实验楼 401 · 进度 64%</div>
+                  </div>
+                  <button type="button" class="arrived-btn" id="arrived-btn">已到教室</button>
+                </div>
+                <div class="dot-matrix" id="dot-matrix" aria-label="28 点课程进度条"></div>
+              </div>
+            </div>
+
+            <div class="companion-card">
+              <div class="companion-eyebrow">纯本地架构与系统适配指标</div>
+              <div class="companion-stats">
+                <div class="stat-tile">
+                  <strong>0 字节</strong>
+                  <span>云端课表上传（SQLite 纯本地）</span>
+                </div>
+                <div class="stat-tile">
+                  <strong>17+ 入口</strong>
+                  <span>预置高校教务 WebView 抓取</span>
+                </div>
+                <div class="stat-tile">
+                  <strong>7 + N 套</strong>
+                  <span>音乐人专辑色板 + JSON 导入</span>
+                </div>
+                <div class="stat-tile">
+                  <strong>5 大协议</strong>
+                  <span>Android 16 及国产实况胶囊</span>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- Curved Floating Icon Strip + Editorial Statement -->
+    <section class="bouncer-section reveal-on-scroll" aria-label="核心特性图标带与设计宣言">
+      <div class="bouncer-strip" aria-hidden="true">
+        <div class="bouncer-disc" style="--arc-y: 20px;">
+          <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><circle cx="12" cy="12" r="9"/><circle cx="12" cy="12" r="3"/></svg>
+          <span>黑胶唱盘</span>
+        </div>
+        <div class="bouncer-disc" style="--arc-y: 8px;">
+          <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><path d="M3 12h3l3-6 4 12 3-6h5"/></svg>
+          <span>120Hz</span>
+        </div>
+        <div class="bouncer-disc" style="--arc-y: -2px;">
+          <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><rect x="4" y="5" width="16" height="14" rx="4"/><path d="M9 10h6M9 14h4"/></svg>
+          <span>液态玻璃</span>
+        </div>
+        <div class="bouncer-disc" style="--arc-y: -10px;">
+          <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><rect x="3" y="8" width="18" height="8" rx="4"/><circle cx="8" cy="12" r="1.5" fill="currentColor"/></svg>
+          <span>实况胶囊</span>
+        </div>
+        <div class="bouncer-disc" style="--arc-y: -14px;">
+          <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><path d="M4 6h16v12H4z"/><path d="M4 10h16M10 6v12"/></svg>
+          <span>教务导课</span>
+        </div>
+        <div class="bouncer-disc" style="--arc-y: -14px;">
+          <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><rect x="5" y="11" width="14" height="9" rx="2"/><path d="M8 11V7a4 4 0 0 1 8 0v4"/></svg>
+          <span>纯本地隐私</span>
+        </div>
+        <div class="bouncer-disc" style="--arc-y: -10px;">
+          <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><circle cx="12" cy="13" r="7"/><path d="M12 10v3l2 2M9 3h6"/></svg>
+          <span>精确闹钟</span>
+        </div>
+        <div class="bouncer-disc" style="--arc-y: -2px;">
+          <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><rect x="6" y="7" width="12" height="10" rx="3"/><path d="M9 7V4h6v3M9 17v3h6v-3"/></svg>
+          <span>穿戴同步</span>
+        </div>
+        <div class="bouncer-disc" style="--arc-y: 8px;">
+          <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><path d="M9 18V5l11-2v13"/><circle cx="6" cy="18" r="3"/><circle cx="17" cy="16" r="3"/></svg>
+          <span>双语歌词</span>
+        </div>
+        <div class="bouncer-disc" style="--arc-y: 20px;">
+          <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><rect x="4" y="4" width="7" height="7" rx="2"/><rect x="13" y="4" width="7" height="7" rx="2"/><rect x="4" y="13" width="16" height="7" rx="2"/></svg>
+          <span>桌面组件</span>
+        </div>
+      </div>
+
+      <p class="editorial-statement">
+        课轨 ClassTrack 将每一堂课谱写成黑胶唱片里的专属音轨——无需注册账号、不上传任何课表隐私、拒绝开屏广告，让日常查课回归纯粹克制的工具美学。
+      </p>
+    </section>
+
+    <!-- Feature Explorer (4 Alternating Rows) -->
+    <section class="feature-explorer" id="features" aria-label="核心功能深度解析">
+      <!-- 01 -->
+      <article class="feature-row reveal-on-scroll">
+        <div class="feature-copy">
+          <span class="section-eyebrow">01 · SCHEDULE &amp; BELL TIMES</span>
+          <h3>周课表网格与跨节长课引擎</h3>
+          <p>专为真实高校排课复杂性打磨：支持左右滑动切换周次与一键回本周，自动识别合并 3 节及以上的实验课与专业长课。</p>
+          <ul class="feature-points">
+            <li>精准处理单双周与离散周次表达式（如 <code>2,6,8-9,12-18周</code>）</li>
+            <li>支持每日 6–16 节作息长度调整，可按课间/大课间间隔一键顺延后续节次</li>
+            <li>内置桌面黑胶样式 <code>AppWidget</code> 小组件，亮屏即可查看今日待上课程</li>
+          </ul>
+        </div>
+        <div class="feature-visual visual-aura-light">
+          <div class="long-course-card">
+            <div class="merged-slot-row">
+              <div class="slot-time-col">
+                <span>08:00</span>
+                <span>09:35</span>
+              </div>
+              <div class="merged-course-pill" style="background: #fceee9; border-left-color: #d95338;">
+                <strong>高等数学 (II) · 上午连堂</strong>
+                <div class="merged-tags">
+                  <span class="mini-tag" style="color: #c84328;">01-02 节</span>
+                  <span class="mini-tag" style="color: #c84328;">1-16 周</span>
+                  <span class="mini-tag" style="color: #c84328;">博学楼 302</span>
+                </div>
+              </div>
+            </div>
+            <div class="merged-slot-row">
+              <div class="slot-time-col">
+                <span>09:50</span>
+                <span>12:15</span>
+              </div>
+              <div class="merged-course-pill">
+                <strong>大学物理与电路综合实验</strong>
+                <div class="merged-tags">
+                  <span class="mini-tag">3 节跨节自动合并</span>
+                  <span class="mini-tag">2,6,8-9,12-18 周</span>
+                  <span class="mini-tag">单双周感知</span>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </article>
+
+      <!-- 02 -->
+      <article class="feature-row feature-row--reverse reveal-on-scroll" id="portals">
+        <div class="feature-copy">
+          <span class="section-eyebrow">02 · CAMPUS PORTAL &amp; IMPORT</span>
+          <h3>内置教务 WebView 与全格式导课</h3>
+          <p>通过应用内 WebView 登录本校教务即可直接抓取解析二维课表，原生攻克 <code>rowspan</code> 跨行合并、同格多门课与非补零节次等棘手格式。</p>
+          <ul class="feature-points">
+            <li>已预置 17 个高校教务入口（含对外经贸综合教务与 <code>bkjw</code> 新端），也可手动输入任意网址</li>
+            <li>兼容强智、正方/新正方、青果、树维/URP、金智等主流教务厂商系统</li>
+            <li>支持完整 JSON 备份、分享口令、CSV 粘贴导入与 AI 提示词截图转 JSON 导课</li>
+          </ul>
+        </div>
+        <div class="feature-visual visual-dark-terminal">
+          <div class="portal-filter-row" role="group" aria-label="按教务系统类型筛选预置高校">
+            <button type="button" class="portal-filter-btn is-active" data-system="all">全部预置 (17)</button>
+            <button type="button" class="portal-filter-btn" data-system="强智">强智教务</button>
+            <button type="button" class="portal-filter-btn" data-system="正方">正方/新正方</button>
+            <button type="button" class="portal-filter-btn" data-system="综合">金智/URP/综合</button>
+          </div>
+          <div class="portal-wall" id="portal-wall"></div>
+        </div>
+      </article>
+
+      <!-- 03 -->
+      <article class="feature-row reveal-on-scroll">
+        <div class="feature-copy">
+          <span class="section-eyebrow">03 · OPTICAL LIQUID GLASS</span>
+          <h3>零重绘开销的双材质美学架构</h3>
+          <p>拒绝廉价重影与卡顿掉帧。基于 Jetpack Compose <code>drawWithCache</code> 缓存全部渐变画笔，在日常滑动与翻周时实现真正的 0 CPU/GPU 额外分配。</p>
+          <ul class="feature-points">
+            <li>「经典纯净」：高对比实色卡片搭配 0.7dp 极细微对比描边，利落清爽</li>
+            <li>「液态玻璃」：半透磨砂光学表面 + 0.8dp 柔光折射线框 + 三球漫射环境光晕</li>
+            <li>完整支持通过 JSON 文件导入自定义配色、字体风格与代表作歌词</li>
+          </ul>
+        </div>
+        <div class="feature-visual visual-optical-glass">
+          <div class="material-compare">
+            <div class="material-sample sample-classic">
+              <div>
+                <span class="mini-tag" style="background: #eef2f7; color: #0f172a;">CLASSIC PURE</span>
+                <h4 style="margin: 12px 0 6px; font-size: 18px;">经典纯净</h4>
+                <p style="margin: 0; font-size: 13px; color: var(--ink-muted);">实体纸张卡片底色，搭配克制 0.7dp 极细边框，信息密度一目了然。</p>
+              </div>
+              <div style="height: 8px; border-radius: 99px; background: #2563eb; width: 68%;"></div>
+            </div>
+            <div class="material-sample sample-glass">
+              <div>
+                <span class="mini-tag" style="background: rgba(37, 99, 235, 0.12); color: #1d4ed8;">LIQUID GLASS</span>
+                <h4 style="margin: 12px 0 6px; font-size: 18px;">液态玻璃</h4>
+                <p style="margin: 0; font-size: 13px; color: var(--ink-muted);">半透磨砂折射质感 + 顶部柔光高光带，与环境色块自然交融。</p>
+              </div>
+              <div style="height: 8px; border-radius: 99px; background: linear-gradient(90deg, #38bdf8, #f472b6); width: 84%;"></div>
+            </div>
+          </div>
+        </div>
+      </article>
+
+      <!-- 04 -->
+      <article class="feature-row feature-row--reverse reveal-on-scroll">
+        <div class="feature-copy">
+          <span class="section-eyebrow">04 · ALARM &amp; LIVE CAPSULE</span>
+          <h3>精准闹钟排程与多系统实况胶囊</h3>
+          <p>依托 <code>AlarmManager</code> 全生命周期状态机精确调度课前 10 / 15 / 20 / 30 分钟提醒、上课切换与下课自动收起，不错过每一节早八。</p>
+          <ul class="feature-points">
+            <li>双形态通知：28 点阵流体进度卡（支持「已到教室」一键收起）或顶栏实况胶囊</li>
+            <li>原生兼容 Android 16 实况通知及四大国产系统顶栏胶囊协议</li>
+            <li>设置页内置通知、精确闹钟、电池白名单与自启动自检，支持智能手表/手环同步</li>
+          </ul>
+        </div>
+        <div class="feature-visual visual-orbital-dark">
+          <div class="orbital-ring-badge">
+            <strong>Live Updates</strong>
+            <span>AlarmManager 精确状态机</span>
+          </div>
+          <div class="oem-pills">
+            <span class="oem-pill">Android 16 实况通知</span>
+            <span class="oem-pill">ColorOS 流体云</span>
+            <span class="oem-pill">OriginOS 原子岛</span>
+            <span class="oem-pill">HyperOS 焦点通知</span>
+            <span class="oem-pill">MagicOS 实况窗</span>
+          </div>
+        </div>
+      </article>
+    </section>
+
+    <!-- 7 Artist Vinyl Record Cabinet Carousel -->
+    <section class="carousel-section reveal-on-scroll" id="albums" aria-roledescription="carousel" aria-label="内置音乐人专辑主题唱片柜">
+      <div class="section-header">
+        <div>
+          <span class="section-eyebrow">VINYL RECORD CABINET</span>
+          <h2 class="section-title">7 套内置音乐人黑胶专辑主题</h2>
+          <p class="section-desc">横跨华语、欧美、K-Pop 与日音，每套主题均配有专属双语歌词日签；点击任意专辑即可同步切换上方预览台与全站粒子星环。</p>
+        </div>
+      </div>
+
+      <div class="genre-filter-bar" role="group" aria-label="按音乐流派筛选主题">
+        <button type="button" class="genre-btn is-active" data-genre="ALL">全部专辑 (7)</button>
+        <button type="button" class="genre-btn" data-genre="MANDOPOP">华语</button>
+        <button type="button" class="genre-btn" data-genre="ENGLISH">欧美</button>
+        <button type="button" class="genre-btn" data-genre="KPOP">K-Pop</button>
+        <button type="button" class="genre-btn" data-genre="JPOP">日音</button>
+      </div>
+
+      <div class="carousel-shell">
+        <div class="carousel-controls">
+          <button type="button" class="carousel-arrow-btn" id="carousel-prev" aria-label="上一张专辑主题">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><polyline points="15 18 9 12 15 6"/></svg>
+          </button>
+          <button type="button" class="carousel-arrow-btn" id="carousel-next" aria-label="下一张专辑主题">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><polyline points="9 18 15 12 9 6"/></svg>
+          </button>
+        </div>
+
+        <div class="vinyl-carousel-track" id="vinyl-track" tabindex="0" role="group" aria-label="音乐人专辑主题列表"></div>
+
+        <p class="visually-hidden" id="carousel-status" role="status" aria-live="polite"></p>
+        <nav class="carousel-markers" id="carousel-markers" aria-label="选择专辑主题幻灯片"></nav>
+      </div>
+    </section>
+
+    <!-- OAuth-Callback Inspired Build & Custom Theme Workshop -->
+    <section class="workshop-section" id="workshop" aria-labelledby="workshop-heading">
+      <canvas class="particle-canvas" id="workshop-canvas" data-theme="ring" aria-hidden="true"></canvas>
+      <div class="workshop-inner">
+        <div class="hero-brand-pill">
+          <img src="./favicon.svg" alt="" width="24" height="24">
+          <span>ClassTrack · 构建与主题工坊</span>
+        </div>
+
+        <h2 class="workshop-title" id="workshop-heading">三步完成源码编译，或导入 AI 定制色板</h2>
+        <p class="workshop-desc">
+          当前仓库暂无预编译 Release APK，欢迎克隆源码使用 Gradle 9.1 直接打包，或复制下方 JSON 模板交由大模型生成你的专属歌手皮肤。
+        </p>
+
+        <div class="workshop-tabs" role="tablist" aria-label="工坊指令切换">
+          <button type="button" class="workshop-tab is-active" role="tab" aria-selected="true" data-tab="build">源码构建 APK</button>
+          <button type="button" class="workshop-tab" role="tab" aria-selected="false" data-tab="theme">AI 自定义主题 JSON</button>
+          <button type="button" class="workshop-tab" role="tab" aria-selected="false" data-tab="stack">环境与技术栈</button>
+        </div>
+
+        <pre class="code-box" id="workshop-code" tabindex="0">git clone https://github.com/Vataraxl/ClassTrack.git
+cd ClassTrack
+./gradlew assembleDebug
+# 产物位于 app/build/outputs/apk/debug/app-debug.apk</pre>
+
+        <button type="button" class="copy-btn" id="workshop-copy-btn">
+          复制构建命令
+        </button>
+
+        <div class="workshop-links">
+          <a href="https://github.com/Vataraxl/ClassTrack" target="_blank" rel="noopener noreferrer">GitHub 源码</a>
+          <span class="sep">|</span>
+          <a href="https://github.com/Vataraxl/ClassTrack/releases" target="_blank" rel="noopener noreferrer">Releases 页面</a>
+          <span class="sep">|</span>
+          <a href="https://github.com/Vataraxl/ClassTrack/blob/main/README.md" target="_blank" rel="noopener noreferrer">完整 README</a>
+        </div>
+      </div>
+    </section>
+
+    <!-- Dual Split CTA Cards -->
+    <section class="split-cta-section reveal-on-scroll" aria-label="适用人群与技术开放">
+      <div class="split-grid">
+        <div class="split-card">
+          <div>
+            <span class="split-eyebrow">面向高校学子</span>
+            <h3>零广告、纯本地、不上传隐私</h3>
+            <p>所有课表、作息与自定义专辑色板均保存在本地 SQLite 与 SharedPreferences，无开屏广告、无需账号登录。</p>
+          </div>
+          <div>
+            <a class="pill-btn pill-btn--primary" href="#preview">回到交互预览 ↑</a>
+          </div>
+        </div>
+
+        <div class="split-card">
+          <div>
+            <span class="split-eyebrow">面向开源开发者</span>
+            <h3>Kotlin 2.3 + Compose + Navigation 3</h3>
+            <p>基于 AGP 9.0.1、Android SDK 36 与 Material 3 构建，代码分层清晰，欢迎 PR 补充更多高校教务适配规则。</p>
+          </div>
+          <div>
+            <a class="pill-btn pill-btn--secondary" href="https://github.com/Vataraxl/ClassTrack" target="_blank" rel="noopener noreferrer">贡献高校适配 ↗</a>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- Dark Particle Download CTA -->
+    <section class="dark-cta-wrap reveal-on-scroll" aria-labelledby="dark-cta-heading">
+      <div class="dark-cta-card">
+        <canvas class="particle-canvas" id="dark-canvas" data-theme="dark" aria-hidden="true"></canvas>
+        <div class="dark-cta-inner">
+          <h2 id="dark-cta-heading">开启你的新学期黑胶课轨</h2>
+          <p>MIT 开源协议 · 支持 Android 8.0+ (minSdk 26 / targetSdk 36)</p>
+          <div class="hero-cta-row">
+            <a class="pill-btn pill-btn--inverse" href="https://github.com/Vataraxl/ClassTrack" target="_blank" rel="noopener noreferrer">
+              前往 GitHub 仓库 ↗
+            </a>
+            <a class="pill-btn pill-btn--inverse-ghost" href="https://github.com/Vataraxl/ClassTrack/releases" target="_blank" rel="noopener noreferrer">
+              查看 Releases 页面
+            </a>
+          </div>
+        </div>
+      </div>
+    </section>
+  </main>
+
+  <footer class="site-footer">
+    <div class="footer-top">
+      <div>
+        <p class="footer-tagline">Experience every class on vinyl.</p>
+        <p class="footer-sub">课轨 · ClassTrack — 120Hz 丝滑流体美学与黑胶专辑质感高校课表</p>
+      </div>
+      <div class="footer-col">
+        <h4>产品模块</h4>
+        <ul>
+          <li><a href="#preview">实时交互预览</a></li>
+          <li><a href="#features">跨节长课与双材质</a></li>
+          <li><a href="#portals">高校教务兼容墙</a></li>
+          <li><a href="#albums">7 套音乐人专辑</a></li>
+        </ul>
+      </div>
+      <div class="footer-col">
+        <h4>开源与构建</h4>
+        <ul>
+          <li><a href="#workshop">源码编译与主题工坊</a></li>
+          <li><a href="https://github.com/Vataraxl/ClassTrack" target="_blank" rel="noopener noreferrer">GitHub 仓库</a></li>
+          <li><a href="https://github.com/Vataraxl/ClassTrack/releases" target="_blank" rel="noopener noreferrer">Releases</a></li>
+          <li><a href="https://github.com/Vataraxl/ClassTrack/blob/main/LICENSE" target="_blank" rel="noopener noreferrer">MIT License</a></li>
+        </ul>
+      </div>
+    </div>
+
+    <!-- Giant Signature Wordmark (Antigravity-inspired elevated 'T') -->
+    <svg class="giant-wordmark" viewBox="0 0 1200 210" fill="none" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="ClassTrack">
+      <text x="14" y="172" fill="#121317" font-family="system-ui, -apple-system, 'Segoe UI', sans-serif" font-size="186" font-weight="600" letter-spacing="-7">
+        Class<tspan dy="-22">T</tspan><tspan dy="22">rack</tspan>
+      </text>
+      <circle cx="1158" cy="158" r="13" fill="#3279f9"/>
+    </svg>
+
+    <div class="footer-bottom">
+      <span>© 2026 ClassTrack · 由 @Vataraxl 开源维护</span>
+      <div class="footer-legal">
+        <a href="https://github.com/Vataraxl/ClassTrack" target="_blank" rel="noopener noreferrer">GitHub</a>
+        <a href="https://github.com/Vataraxl/ClassTrack/blob/main/LICENSE" target="_blank" rel="noopener noreferrer">MIT License</a>
+        <a href="#top">返回顶部 ↑</a>
+      </div>
+    </div>
+  </footer>
+
+  <script type="module" src="./app.js"></script>
+</body>
+</html>
