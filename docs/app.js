@@ -658,10 +658,12 @@ uniform float uAspect;
 uniform float uPixelRatio;
 varying float vScale;
 varying float vMorph;
+varying vec2 vPos;
 
 void main() {
   vScale = aData.z;
   vMorph = aData.w;
+  vPos = aData.xy;
   gl_Position = vec4(aData.x / uAspect, aData.y, 0.0, 1.0);
   float basePt = mix(2.0, 2.7, vMorph);
   gl_PointSize = clamp((vScale * basePt + 0.8) * uPixelRatio, 1.5, 8.0);
@@ -671,6 +673,7 @@ const MORPH_FRAG_SRC = `
 precision highp float;
 varying float vScale;
 varying float vMorph;
+varying vec2 vPos;
 
 void main() {
   vec2 uv = gl_PointCoord.xy - vec2(0.5);
@@ -678,9 +681,15 @@ void main() {
   float circle = smoothstep(0.5, 0.34, d);
   if (circle < 0.02) discard;
 
-  vec3 idleCol = vec3(0.26, 0.28, 0.32);    // 深炭灰微点
-  vec3 flyCol  = vec3(1.0, 0.275, 0.255);   // #FF4641 珊瑚红跃迁
-  vec3 lockCol = vec3(0.204, 0.420, 0.945); // #346BF1 鲜亮电光蓝
+  vec3 idleCol   = vec3(0.26, 0.28, 0.32);    // 深炭灰微点
+  vec3 flyCol    = vec3(1.0, 0.275, 0.255);   // #FF4641 珊瑚红跃迁
+  vec3 lockBlue  = vec3(0.204, 0.420, 0.945); // #346BF1 鲜亮电光蓝主色
+  vec3 tintCyan  = vec3(0.220, 0.741, 0.973); // #38BDF8 局部冰晶青高光
+  vec3 tintIndig = vec3(0.357, 0.353, 0.969); // #5B5AF7 局部霓虹靛微光
+
+  float wave = clamp(0.5 + 0.35 * vPos.x + 0.35 * vPos.y, 0.0, 1.0);
+  vec3 tintCol = mix(tintIndig, tintCyan, wave);
+  vec3 lockCol = mix(lockBlue, tintCol, 0.16);
 
   float mid = smoothstep(0.08, 0.45, vMorph);
   float end = smoothstep(0.40, 0.78, vMorph);
@@ -690,6 +699,21 @@ void main() {
   if (a < 0.015) discard;
   gl_FragColor = vec4(col * a, a);
 }`;
+
+function drawRoundedRectPath(ctx, x, y, w, h, r) {
+  const rad = Math.min(r, w * 0.5, h * 0.5);
+  ctx.beginPath();
+  ctx.moveTo(x + rad, y);
+  ctx.lineTo(x + w - rad, y);
+  ctx.quadraticCurveTo(x + w, y, x + w, y + rad);
+  ctx.lineTo(x + w, y + h - rad);
+  ctx.quadraticCurveTo(x + w, y + h, x + w - rad, y + h);
+  ctx.lineTo(x + rad, y + h);
+  ctx.quadraticCurveTo(x, y + h, x, y + h - rad);
+  ctx.lineTo(x, y + rad);
+  ctx.quadraticCurveTo(x, y, x + rad, y);
+  ctx.closePath();
+}
 
 function sampleMorphTargets(shapeType, aspect) {
   const size = 500;
@@ -703,52 +727,151 @@ function sampleMorphTargets(shapeType, aspect) {
   ctx.lineCap = 'round';
   ctx.lineJoin = 'round';
 
-  if (shapeType === 'braces') {
-    // 宽幅大括号 { }，中间留出充裕空白给双行标题
-    ctx.lineWidth = 22;
-    // 左花括号 {
+  if (shapeType === 'vinyl') {
+    // ClassTrack 黑胶唱盘 + 双重声槽弧线 + 右侧唱臂唱头 + 左上跃动八分音符 ♪
+    // 中心安全留白区 x∈[115,385], y∈[160,342] 完全避开，保证文案与按钮清晰可读
+    const cx = 232;
+    const cy = 250;
+
+    // 1. 黑胶外盘环
+    ctx.lineWidth = 17;
     ctx.beginPath();
-    ctx.moveTo(148, 42);
-    ctx.lineTo(106, 42);
-    ctx.quadraticCurveTo(68, 42, 68, 80);
-    ctx.lineTo(68, 206);
-    ctx.quadraticCurveTo(68, 238, 18, 250);
-    ctx.quadraticCurveTo(68, 262, 68, 294);
-    ctx.lineTo(68, 420);
-    ctx.quadraticCurveTo(68, 458, 106, 458);
-    ctx.lineTo(148, 458);
+    ctx.arc(cx, cy, 194, 0, Math.PI * 2);
     ctx.stroke();
 
-    // 右花括号 }
+    // 2. 上下双重声槽弧线（精确位于安全区上方 y<150 与下方 y>350）
+    ctx.lineWidth = 9;
     ctx.beginPath();
-    ctx.moveTo(352, 42);
-    ctx.lineTo(394, 42);
-    ctx.quadraticCurveTo(432, 42, 432, 80);
-    ctx.lineTo(432, 206);
-    ctx.quadraticCurveTo(432, 238, 482, 250);
-    ctx.quadraticCurveTo(432, 262, 432, 294);
-    ctx.lineTo(432, 420);
-    ctx.quadraticCurveTo(432, 458, 394, 458);
-    ctx.lineTo(352, 458);
+    ctx.arc(cx, cy, 156, -Math.PI * 0.76, -Math.PI * 0.24);
+    ctx.stroke();
+    ctx.beginPath();
+    ctx.arc(cx, cy, 156, Math.PI * 0.24, Math.PI * 0.76);
+    ctx.stroke();
+
+    ctx.lineWidth = 7;
+    ctx.beginPath();
+    ctx.arc(cx, cy, 126, -Math.PI * 0.69, -Math.PI * 0.31);
+    ctx.stroke();
+    ctx.beginPath();
+    ctx.arc(cx, cy, 126, Math.PI * 0.31, Math.PI * 0.69);
+    ctx.stroke();
+
+    // 3. 右侧唱机枢轴底座 + 折线唱臂 + 倾斜唱头
+    ctx.lineWidth = 10;
+    ctx.beginPath();
+    ctx.arc(456, 78, 20, 0, Math.PI * 2);
+    ctx.stroke();
+    ctx.beginPath();
+    ctx.arc(456, 78, 6, 0, Math.PI * 2);
+    ctx.fill();
+
+    ctx.lineWidth = 13;
+    ctx.beginPath();
+    ctx.moveTo(456, 102);
+    ctx.lineTo(452, 296);
+    ctx.lineTo(414, 372);
+    ctx.stroke();
+
+    // 唱头外壳块
+    ctx.lineWidth = 22;
+    ctx.beginPath();
+    ctx.moveTo(421, 358);
+    ctx.lineTo(408, 384);
+    ctx.stroke();
+
+    // 4. 左上角八分音符 ♪（位于盘环左上方外侧）
+    ctx.save();
+    ctx.translate(54, 102);
+    ctx.rotate(-0.42);
+    ctx.beginPath();
+    ctx.ellipse(0, 0, 17, 12, 0, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.restore();
+
+    ctx.lineWidth = 11;
+    ctx.beginPath();
+    ctx.moveTo(67, 98);
+    ctx.lineTo(67, 42);
+    ctx.quadraticCurveTo(96, 50, 99, 75);
     ctx.stroke();
   } else {
-    // 六角拓扑环（6 枚圆点簇形成正六边形环，中心大面积留白）
-    const ringR = 186;
-    const nodeR = 36;
-    for (let k = 0; k < 6; k++) {
-      const ang = -Math.PI / 2 + (k * Math.PI) / 3;
-      const nx = 250 + Math.cos(ang) * ringR;
-      const ny = 250 + Math.sin(ang) * ringR;
+    // ClassTrack 监听头戴式耳机 + 顶部课节状态胶囊 + 底部七柱课程节律频谱
+    // 中心安全留白区 x∈[115,385], y∈[160,342] 零遮挡
+    const cx = 250;
+    const cy = 240;
+
+    // 1. 头梁弧线
+    ctx.lineWidth = 18;
+    ctx.beginPath();
+    ctx.arc(cx, cy, 192, -Math.PI * 0.93, -Math.PI * 0.07);
+    ctx.stroke();
+
+    // 头梁内衬减压垫细弧
+    ctx.lineWidth = 8;
+    ctx.beginPath();
+    ctx.arc(cx, cy, 168, -Math.PI * 0.72, -Math.PI * 0.28);
+    ctx.stroke();
+
+    // 2. 顶部实时课节状态胶囊（位于头梁下方、文案上方 y∈[106, 134]）
+    ctx.lineWidth = 9;
+    drawRoundedRectPath(ctx, 182, 106, 136, 28, 14);
+    ctx.stroke();
+    ctx.beginPath();
+    ctx.arc(202, 120, 6.5, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.lineWidth = 6.5;
+    ctx.beginPath();
+    ctx.moveTo(220, 120);
+    ctx.lineTo(298, 120);
+    ctx.stroke();
+
+    // 3. 左右全包耳式耳罩 + 衔接臂 + 外侧声波弧
+    ctx.lineWidth = 14;
+    ctx.beginPath();
+    ctx.moveTo(62, 198);
+    ctx.lineTo(66, 212);
+    ctx.moveTo(438, 198);
+    ctx.lineTo(434, 212);
+    ctx.stroke();
+
+    drawRoundedRectPath(ctx, 48, 206, 36, 128, 18);
+    ctx.fill();
+    drawRoundedRectPath(ctx, 416, 206, 36, 128, 18);
+    ctx.fill();
+
+    // 左右外侧声波弧
+    ctx.lineWidth = 9;
+    ctx.beginPath();
+    ctx.arc(70, 270, 50, Math.PI * 0.79, Math.PI * 1.21);
+    ctx.stroke();
+    ctx.beginPath();
+    ctx.arc(430, 270, 50, -Math.PI * 0.21, Math.PI * 0.21);
+    ctx.stroke();
+
+    // 4. 底部 7 柱课程频谱柱（y >= 370，位于按钮下方）
+    const eqBars = [
+      [148, 412, 448],
+      [182, 388, 452],
+      [216, 372, 456],
+      [250, 396, 446],
+      [284, 370, 456],
+      [318, 388, 452],
+      [352, 412, 448]
+    ];
+    ctx.lineWidth = 13;
+    for (const [bx, byTop, byBottom] of eqBars) {
       ctx.beginPath();
-      ctx.arc(nx, ny, nodeR, 0, Math.PI * 2);
-      ctx.fill();
+      ctx.moveTo(bx, byTop);
+      ctx.lineTo(bx, byBottom);
+      ctx.stroke();
     }
   }
 
   const img = ctx.getImageData(0, 0, size, size).data;
   const targets = [];
-  const halfSpanX = shapeType === 'braces' ? aspect * 0.97 : Math.min(aspect * 0.9, 0.9);
-  const halfSpanY = 0.86;
+  const span = Math.min(aspect * 0.92, 0.90);
+  const halfSpanX = span;
+  const halfSpanY = span;
   const step = 2;
 
   for (let y = 0; y < size; y += step) {
@@ -1030,8 +1153,8 @@ const heroField = new WebGLParticleField(document.getElementById('hero-canvas'),
   particleScale: 0.92
 });
 
-const morphLeftField = new MorphingParticleField(document.getElementById('morph-left-canvas'), 'braces');
-const morphRightField = new MorphingParticleField(document.getElementById('morph-right-canvas'), 'cube');
+const morphLeftField = new MorphingParticleField(document.getElementById('morph-left-canvas'), 'vinyl');
+const morphRightField = new MorphingParticleField(document.getElementById('morph-right-canvas'), 'headphones');
 
 const darkField = new WebGLParticleField(document.getElementById('dark-canvas'), {
   theme: 'dark',
@@ -1114,8 +1237,8 @@ const bindMorphCol = (selector, morphField) => {
     }
   });
 };
-bindMorphCol('[data-morph-shape="braces"]', morphLeftField);
-bindMorphCol('[data-morph-shape="cube"]', morphRightField);
+bindMorphCol('[data-morph-shape="vinyl"]', morphLeftField);
+bindMorphCol('[data-morph-shape="headphones"]', morphRightField);
 
 // Hero 粒子随向下滚动渐隐（100% 对标 antigravity.google ScrollTrigger）
 const heroSectionEl = document.querySelector('.hero-section');
