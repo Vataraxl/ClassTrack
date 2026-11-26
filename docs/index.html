@@ -193,12 +193,12 @@
       </div>
     </section>
 
-    <!-- 22 Icon-Only Bouncer Discs (100vw Overflow) + Single Statement -->
-    <section class="bouncer-section reveal-on-scroll" aria-label="核心能力图标弧线与宣言">
-      <div class="bouncer-strip" id="bouncer-strip" aria-hidden="true"></div>
+    <!-- 26 Icon-Only Bouncer Sine Wave Strip + Typing Statement -->
+    <section class="bouncer-section reveal-on-scroll" aria-label="核心能力图标波浪带与宣言">
+      <ul class="bouncer-strip" id="bouncer-strip" aria-hidden="true"></ul>
       <div class="statement-wrap">
         <p class="editorial-statement">
-          课轨 ClassTrack 是纯本地运行的高校课表应用，将每一堂课谱写成黑胶唱片里的专属音轨。
+          <span id="statement-text" data-full-text="课轨 ClassTrack 是纯本地运行的高校课表应用，将每一堂课谱写成黑胶唱片里的专属音轨。">课轨 ClassTrack 是纯本地运行的高校课表应用，将每一堂课谱写成黑胶唱片里的专属音轨。</span><span class="typing-caret is-done" id="statement-caret" aria-hidden="true"></span>
         </p>
       </div>
     </section>
@@ -305,27 +305,29 @@
       <nav class="carousel-markers" id="carousel-markers" aria-label="选择专辑幻灯片"></nav>
     </section>
 
-    <!-- 50/50 Dual Split WebGL Particle Chambers -->
-    <section class="split-section reveal-on-scroll" id="workshop" aria-label="纯本地架构与源码工坊">
-      <div class="split-chamber" data-split-field="left">
-        <canvas class="particle-canvas" id="split-left-canvas" aria-hidden="true"></canvas>
-        <div class="split-chamber-inner">
-          <span class="split-frosted-tag">纯本地架构</span>
-          <h3>零账号，零云端上传</h3>
-          <a class="pill-btn pill-btn--primary" href="https://github.com/Vataraxl/ClassTrack" target="_blank" rel="noopener noreferrer">
-            浏览 GitHub 源码 ↗
-          </a>
+    <!-- 50/50 Borderless Morphing Dot Matrix Chambers -->
+    <section class="try-solutions-section reveal-on-scroll" id="workshop" aria-label="个人与高校学子、开源与主题工坊">
+      <div class="solutions-wrapper">
+        <div class="solution-col" data-morph-shape="braces">
+          <canvas class="morphing-canvas" id="morph-left-canvas" aria-hidden="true"></canvas>
+          <div class="solution-content">
+            <p class="solution-label">免费开源使用</p>
+            <p class="solution-head">个人与高校学子</p>
+            <p class="solution-subhead">突破繁琐查课边界</p>
+            <a class="pill-btn pill-btn--primary" href="#download">立即获取</a>
+          </div>
         </div>
-      </div>
 
-      <div class="split-chamber" data-split-field="right">
-        <canvas class="particle-canvas" id="split-right-canvas" aria-hidden="true"></canvas>
-        <div class="split-chamber-inner">
-          <span class="split-frosted-tag">构建与定制</span>
-          <h3>三步编译，或导入 AI 主题</h3>
-          <button type="button" class="pill-btn pill-btn--secondary" id="open-workshop-btn">
-            打开命令与 JSON 工坊
-          </button>
+        <div class="solution-col" data-morph-shape="cube">
+          <canvas class="morphing-canvas" id="morph-right-canvas" aria-hidden="true"></canvas>
+          <div class="solution-content">
+            <p class="solution-label">支持自由定制</p>
+            <p class="solution-head">开源与主题工坊</p>
+            <p class="solution-subhead">全面定制专属课轨</p>
+            <button type="button" class="pill-btn pill-btn--secondary" id="open-workshop-btn">
+              打开工坊
+            </button>
+          </div>
         </div>
       </div>
     </section>

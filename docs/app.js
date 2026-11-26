@@ -649,6 +649,375 @@ class WebGLParticleField {
 }
 
 // ============================================================
+// 2b. 50/50 悬停聚拢变形粒子场 (1:1 复刻 MorphingParticlesComponent)
+// ============================================================
+const MORPH_VERT_SRC = `
+precision highp float;
+attribute vec4 aData; // x, y, scale, morph
+uniform float uAspect;
+uniform float uPixelRatio;
+varying float vScale;
+varying float vMorph;
+
+void main() {
+  vScale = aData.z;
+  vMorph = aData.w;
+  gl_Position = vec4(aData.x / uAspect, aData.y, 0.0, 1.0);
+  float basePt = mix(2.0, 2.7, vMorph);
+  gl_PointSize = clamp((vScale * basePt + 0.8) * uPixelRatio, 1.5, 8.0);
+}`;
+
+const MORPH_FRAG_SRC = `
+precision highp float;
+varying float vScale;
+varying float vMorph;
+
+void main() {
+  vec2 uv = gl_PointCoord.xy - vec2(0.5);
+  float d = length(uv);
+  float circle = smoothstep(0.5, 0.34, d);
+  if (circle < 0.02) discard;
+
+  vec3 idleCol = vec3(0.26, 0.28, 0.32);    // 深炭灰微点
+  vec3 flyCol  = vec3(1.0, 0.275, 0.255);   // #FF4641 珊瑚红跃迁
+  vec3 lockCol = vec3(0.204, 0.420, 0.945); // #346BF1 鲜亮电光蓝
+
+  float mid = smoothstep(0.08, 0.45, vMorph);
+  float end = smoothstep(0.40, 0.78, vMorph);
+  vec3 col = mix(mix(idleCol, flyCol, mid), lockCol, end);
+
+  float a = circle * clamp(mix(0.68, 0.95, vMorph) * smoothstep(0.04, 0.32, vScale), 0.0, 1.0);
+  if (a < 0.015) discard;
+  gl_FragColor = vec4(col * a, a);
+}`;
+
+function sampleMorphTargets(shapeType, aspect) {
+  const size = 500;
+  const off = document.createElement('canvas');
+  off.width = size;
+  off.height = size;
+  const ctx = off.getContext('2d');
+  ctx.clearRect(0, 0, size, size);
+  ctx.strokeStyle = '#000000';
+  ctx.fillStyle = '#000000';
+  ctx.lineCap = 'round';
+  ctx.lineJoin = 'round';
+
+  if (shapeType === 'braces') {
+    // 宽幅大括号 { }，中间留出充裕空白给双行标题
+    ctx.lineWidth = 22;
+    // 左花括号 {
+    ctx.beginPath();
+    ctx.moveTo(148, 42);
+    ctx.lineTo(106, 42);
+    ctx.quadraticCurveTo(68, 42, 68, 80);
+    ctx.lineTo(68, 206);
+    ctx.quadraticCurveTo(68, 238, 18, 250);
+    ctx.quadraticCurveTo(68, 262, 68, 294);
+    ctx.lineTo(68, 420);
+    ctx.quadraticCurveTo(68, 458, 106, 458);
+    ctx.lineTo(148, 458);
+    ctx.stroke();
+
+    // 右花括号 }
+    ctx.beginPath();
+    ctx.moveTo(352, 42);
+    ctx.lineTo(394, 42);
+    ctx.quadraticCurveTo(432, 42, 432, 80);
+    ctx.lineTo(432, 206);
+    ctx.quadraticCurveTo(432, 238, 482, 250);
+    ctx.quadraticCurveTo(432, 262, 432, 294);
+    ctx.lineTo(432, 420);
+    ctx.quadraticCurveTo(432, 458, 394, 458);
+    ctx.lineTo(352, 458);
+    ctx.stroke();
+  } else {
+    // 六角拓扑环（6 枚圆点簇形成正六边形环，中心大面积留白）
+    const ringR = 186;
+    const nodeR = 36;
+    for (let k = 0; k < 6; k++) {
+      const ang = -Math.PI / 2 + (k * Math.PI) / 3;
+      const nx = 250 + Math.cos(ang) * ringR;
+      const ny = 250 + Math.sin(ang) * ringR;
+      ctx.beginPath();
+      ctx.arc(nx, ny, nodeR, 0, Math.PI * 2);
+      ctx.fill();
+    }
+  }
+
+  const img = ctx.getImageData(0, 0, size, size).data;
+  const targets = [];
+  const halfSpanX = shapeType === 'braces' ? aspect * 0.97 : Math.min(aspect * 0.9, 0.9);
+  const halfSpanY = 0.86;
+  const step = 2;
+
+  for (let y = 0; y < size; y += step) {
+    for (let x = 0; x < size; x += step) {
+      if (img[(y * size + x) * 4 + 3] > 90) {
+        const jx = (Math.sin(x * 12.9 + y * 78.2) * 43758.5) % 1;
+        const jy = (Math.sin(x * 39.3 + y * 11.1) * 24634.6) % 1;
+        const nx = (((x + (jx - 0.5) * 1.6) / size) * 2 - 1) * halfSpanX;
+        const ny = -((((y + (jy - 0.5) * 1.6) / size) * 2 - 1) * halfSpanY);
+        targets.push([nx, ny]);
+      }
+    }
+  }
+  return targets;
+}
+
+class MorphingParticleField {
+  constructor(canvas, shapeType) {
+    this.canvas = canvas;
+    this.shapeType = shapeType;
+    this.dpr = Math.min(window.devicePixelRatio || 1, 2);
+    this.width = 0;
+    this.height = 0;
+    this.aspect = 1;
+    this.count = 0;
+    this.isHovering = false;
+    this.hoverT = 0;
+    this.isVisible = true;
+    this.running = false;
+    this.rafId = 0;
+    this.time = 0;
+
+    this.gl = canvas.getContext('webgl', {
+      alpha: true,
+      antialias: true,
+      powerPreference: 'high-performance'
+    });
+
+    if (this.gl) {
+      this.initGL();
+    } else {
+      this.ctx2d = canvas.getContext('2d');
+    }
+
+    this.resize();
+    this.seedPoints();
+    this.step(0.016);
+    this.draw();
+  }
+
+  initGL() {
+    const gl = this.gl;
+    const compile = (type, src) => {
+      const s = gl.createShader(type);
+      gl.shaderSource(s, src);
+      gl.compileShader(s);
+      if (!gl.getShaderParameter(s, gl.COMPILE_STATUS)) {
+        throw new Error(gl.getShaderInfoLog(s));
+      }
+      return s;
+    };
+    const prog = gl.createProgram();
+    gl.attachShader(prog, compile(gl.VERTEX_SHADER, MORPH_VERT_SRC));
+    gl.attachShader(prog, compile(gl.FRAGMENT_SHADER, MORPH_FRAG_SRC));
+    gl.linkProgram(prog);
+    gl.useProgram(prog);
+
+    this.program = prog;
+    this.buffer = gl.createBuffer();
+    this.locAttr = gl.getAttribLocation(prog, 'aData');
+    this.uAspect = gl.getUniformLocation(prog, 'uAspect');
+    this.uPixelRatio = gl.getUniformLocation(prog, 'uPixelRatio');
+
+    gl.enable(gl.BLEND);
+    gl.blendFunc(gl.ONE, gl.ONE_MINUS_SRC_ALPHA);
+  }
+
+  resize() {
+    const parent = this.canvas.parentElement;
+    if (!parent) return;
+    const rect = parent.getBoundingClientRect();
+    this.dpr = Math.min(window.devicePixelRatio || 1, 2);
+    this.width = Math.max(280, Math.round(rect.width));
+    this.height = Math.max(320, Math.round(rect.height));
+    this.aspect = this.width / this.height;
+    this.canvas.width = Math.round(this.width * this.dpr);
+    this.canvas.height = Math.round(this.height * this.dpr);
+    if (this.gl) {
+      this.gl.viewport(0, 0, this.canvas.width, this.canvas.height);
+    } else if (this.ctx2d) {
+      this.ctx2d.setTransform(this.dpr, 0, 0, this.dpr, 0, 0);
+    }
+  }
+
+  seedPoints() {
+    const isNarrow = this.width < 520;
+    const cols = isNarrow ? 34 : 50;
+    const rows = isNarrow ? 36 : 48;
+    this.count = cols * rows;
+
+    const targets = sampleMorphTargets(this.shapeType, this.aspect);
+    for (let i = targets.length - 1; i > 0; i--) {
+      const r = Math.abs(Math.sin(i * 19.31 + 7.13)) * 10000;
+      const j = Math.floor((r - Math.floor(r)) * (i + 1));
+      const tmp = targets[i];
+      targets[i] = targets[j];
+      targets[j] = tmp;
+    }
+
+    this.refs = new Float32Array(this.count * 2);
+    this.targets = new Float32Array(this.count * 2);
+    this.seeds = new Float32Array(this.count * 2);
+    this.isMorpher = new Uint8Array(this.count);
+    this.simData = new Float32Array(this.count * 4);
+
+    const spanX = this.aspect * 0.98;
+    const spanY = 0.96;
+    let idx = 0;
+
+    for (let r = 0; r < rows; r++) {
+      for (let c = 0; c < cols; c++) {
+        const s1 = Math.sin(r * 17.13 + c * 91.7) * 43758.5453;
+        const s2 = Math.sin(r * 41.89 + c * 23.4) * 24634.6345;
+        const f1 = s1 - Math.floor(s1);
+        const f2 = s2 - Math.floor(s2);
+
+        const rx = (((c + 0.5 + (f1 - 0.5) * 0.9) / cols) * 2 - 1) * spanX;
+        const ry = (((r + 0.5 + (f2 - 0.5) * 0.9) / rows) * 2 - 1) * spanY;
+
+        this.refs[idx * 2] = rx;
+        this.refs[idx * 2 + 1] = ry;
+        this.seeds[idx * 2] = f1;
+        this.seeds[idx * 2 + 1] = f2;
+
+        // 55% 粒子直接锁入目标轮廓，其余 45% 在悬停时淡出让白底极度干净
+        const active = targets.length > 0 && ((idx * 7) % 20 < 11);
+        this.isMorpher[idx] = active ? 1 : 0;
+        const tgt = targets[idx % Math.max(1, targets.length)] || [rx, ry];
+        this.targets[idx * 2] = tgt[0];
+        this.targets[idx * 2 + 1] = tgt[1];
+
+        this.simData[idx * 4] = rx;
+        this.simData[idx * 4 + 1] = ry;
+        this.simData[idx * 4 + 2] = 0.65;
+        this.simData[idx * 4 + 3] = 0;
+        idx++;
+      }
+    }
+
+    if (this.gl) {
+      const gl = this.gl;
+      gl.bindBuffer(gl.ARRAY_BUFFER, this.buffer);
+      gl.bufferData(gl.ARRAY_BUFFER, this.simData, gl.DYNAMIC_DRAW);
+    }
+  }
+
+  setHover(hover) {
+    this.isHovering = hover;
+    if (!this.running) {
+      this.hoverT = hover ? 1 : 0;
+      this.step(0.016);
+      this.draw();
+    }
+  }
+
+  step(dt) {
+    const t = this.time;
+    const goal = this.isHovering ? 1 : 0;
+    const speed = 1.9; // ~0.52s 完成聚拢或散开
+    if (this.hoverT < goal) {
+      this.hoverT = Math.min(1, this.hoverT + dt * speed);
+    } else if (this.hoverT > goal) {
+      this.hoverT = Math.max(0, this.hoverT - dt * speed);
+    }
+
+    for (let i = 0; i < this.count; i++) {
+      const s1 = this.seeds[i * 2];
+      const s2 = this.seeds[i * 2 + 1];
+      const rx = this.refs[i * 2];
+      const ry = this.refs[i * 2 + 1];
+
+      // 错落起步时间（0..0.28）后极速 cubic-out 锁定
+      const localM = Math.max(0, Math.min(1, (this.hoverT - s1 * 0.25) / 0.75));
+      const inv = 1 - localM;
+      const eased = 1 - inv * inv * inv;
+
+      const morphable = this.isMorpher[i] === 1;
+      const tx = morphable ? this.targets[i * 2] : rx;
+      const ty = morphable ? this.targets[i * 2 + 1] : ry;
+
+      const driftX = Math.sin(t * 0.7 + s1 * 20) * (0.012 * (1 - eased) + 0.002 * eased);
+      const driftY = Math.cos(t * 0.65 + s2 * 20) * (0.012 * (1 - eased) + 0.002 * eased);
+
+      const px = rx + (tx - rx) * (morphable ? eased : 0) + driftX;
+      const py = ry + (ty - ry) * (morphable ? eased : 0) + driftY;
+
+      const lifeEnd = 2.8 + s2 * 1.4;
+      const life = ((s1 * 10 + t * 0.5) % lifeEnd) / lifeEnd;
+      const idleBreath = smoothstep(0.02, 0.35, life) - smoothstep(0.55, 1.0, life);
+      const scale = morphable
+        ? idleBreath * 0.6 * (1 - eased) + 1.05 * eased + 0.22
+        : (idleBreath * 0.58 + 0.16) * (1 - this.hoverT * 0.94);
+
+      this.simData[i * 4] = px;
+      this.simData[i * 4 + 1] = py;
+      this.simData[i * 4 + 2] = scale;
+      this.simData[i * 4 + 3] = morphable ? localM : 0;
+    }
+  }
+
+  draw() {
+    if (this.gl) {
+      const gl = this.gl;
+      gl.useProgram(this.program);
+      gl.clearColor(0, 0, 0, 0);
+      gl.clear(gl.COLOR_BUFFER_BIT);
+
+      gl.bindBuffer(gl.ARRAY_BUFFER, this.buffer);
+      gl.bufferSubData(gl.ARRAY_BUFFER, 0, this.simData);
+      gl.enableVertexAttribArray(this.locAttr);
+      gl.vertexAttribPointer(this.locAttr, 4, gl.FLOAT, false, 0, 0);
+
+      gl.uniform1f(this.uAspect, this.aspect);
+      gl.uniform1f(this.uPixelRatio, this.dpr);
+      gl.drawArrays(gl.POINTS, 0, this.count);
+      return;
+    }
+
+    const ctx = this.ctx2d;
+    ctx.clearRect(0, 0, this.width, this.height);
+    for (let i = 0; i < this.count; i++) {
+      const x = (this.simData[i * 4] / this.aspect * 0.5 + 0.5) * this.width;
+      const y = (-this.simData[i * 4 + 1] * 0.5 + 0.5) * this.height;
+      const m = this.simData[i * 4 + 3];
+      ctx.fillStyle = m > 0.55 ? 'rgba(52,107,241,0.9)' : 'rgba(66,70,80,0.65)';
+      ctx.beginPath();
+      ctx.arc(x, y, m > 0.55 ? 2.2 : 1.3, 0, Math.PI * 2);
+      ctx.fill();
+    }
+  }
+
+  start() {
+    if (this.running) return;
+    this.running = true;
+    let last = performance.now();
+    const tick = (now) => {
+      if (!this.running) return;
+      const dt = Math.min(0.05, (now - last) / 1000);
+      last = now;
+      if (this.isVisible) {
+        this.time += dt;
+        this.step(dt);
+        this.draw();
+      }
+      this.rafId = requestAnimationFrame(tick);
+    };
+    this.rafId = requestAnimationFrame(tick);
+  }
+
+  stop() {
+    this.running = false;
+    if (this.rafId) {
+      cancelAnimationFrame(this.rafId);
+      this.rafId = 0;
+    }
+  }
+}
+
+// ============================================================
 // 3. 初始化全部 WebGL 粒子场、视口暂停与 Hero 滚动淡出
 // ============================================================
 const reducedMotionQuery = window.matchMedia('(prefers-reduced-motion: reduce)');
@@ -661,19 +1030,8 @@ const heroField = new WebGLParticleField(document.getElementById('hero-canvas'),
   particleScale: 0.92
 });
 
-const splitLeftField = new WebGLParticleField(document.getElementById('split-left-canvas'), {
-  theme: 'light',
-  ringMode: 'split',
-  colors: ANTIGRAVITY_LIGHT_COLORS,
-  particleScale: 0.88
-});
-
-const splitRightField = new WebGLParticleField(document.getElementById('split-right-canvas'), {
-  theme: 'light',
-  ringMode: 'split',
-  colors: ANTIGRAVITY_LIGHT_COLORS,
-  particleScale: 0.88
-});
+const morphLeftField = new MorphingParticleField(document.getElementById('morph-left-canvas'), 'braces');
+const morphRightField = new MorphingParticleField(document.getElementById('morph-right-canvas'), 'cube');
 
 const darkField = new WebGLParticleField(document.getElementById('dark-canvas'), {
   theme: 'dark',
@@ -690,16 +1048,21 @@ const dialogField = new WebGLParticleField(document.getElementById('dialog-canva
 });
 dialogField.isVisible = false;
 
-const allFields = [heroField, splitLeftField, splitRightField, darkField, dialogField];
-const lightFields = [heroField, splitLeftField, splitRightField, dialogField];
+const allFields = [heroField, morphLeftField, morphRightField, darkField, dialogField];
+const lightFields = [heroField, dialogField];
+
+let startBouncerWave = () => {};
+let stopBouncerWave = () => {};
 
 function syncMotionLoop() {
   const toggleBtn = document.getElementById('motion-toggle');
   if (userPausedMotion) {
     allFields.forEach((f) => f.stop());
+    stopBouncerWave();
     toggleBtn.textContent = '播放动效';
   } else {
     allFields.forEach((f) => f.start());
+    startBouncerWave();
     toggleBtn.textContent = '暂停动效';
   }
 }
@@ -720,27 +1083,39 @@ const canvasObserver = new IntersectionObserver((entries) => {
   }
 }, { rootMargin: '80px 0px', threshold: 0 });
 
-[heroField, splitLeftField, splitRightField, darkField].forEach((f) => canvasObserver.observe(f.canvas));
+[heroField, morphLeftField, morphRightField, darkField].forEach((f) => canvasObserver.observe(f.canvas));
 
 window.addEventListener('resize', () => {
   allFields.forEach((f) => {
     f.resize();
     f.seedPoints();
-    f.stepSimulation(f.time);
+    if (f.stepSimulation) f.stepSimulation(f.time);
+    else f.step(0.016);
     f.draw();
   });
 }, { passive: true });
 
-// 鼠标引力交互绑定
+// 鼠标引力交互 & 50/50 悬停聚拢变形绑定
 const bindPointer = (el, field) => {
   el.addEventListener('pointermove', (e) => field.updatePointer(e.clientX, e.clientY), { passive: true });
   el.addEventListener('pointerleave', () => field.clearPointer());
 };
 bindPointer(document.querySelector('.hero-section'), heroField);
-bindPointer(document.querySelector('[data-split-field="left"]'), splitLeftField);
-bindPointer(document.querySelector('[data-split-field="right"]'), splitRightField);
 bindPointer(document.querySelector('.dark-cta-card'), darkField);
 bindPointer(document.getElementById('workshop-dialog-stage'), dialogField);
+
+const bindMorphCol = (selector, morphField) => {
+  const col = document.querySelector(selector);
+  col.addEventListener('pointerenter', () => morphField.setHover(true));
+  col.addEventListener('pointerleave', () => morphField.setHover(false));
+  col.addEventListener('click', (e) => {
+    if (window.matchMedia('(pointer: coarse)').matches && !e.target.closest('a, button')) {
+      morphField.setHover(!morphField.isHovering);
+    }
+  });
+};
+bindMorphCol('[data-morph-shape="braces"]', morphLeftField);
+bindMorphCol('[data-morph-shape="cube"]', morphRightField);
 
 // Hero 粒子随向下滚动渐隐（100% 对标 antigravity.google ScrollTrigger）
 const heroSectionEl = document.querySelector('.hero-section');
@@ -774,7 +1149,7 @@ if (!CSS.supports('(animation-timeline: view()) and (animation-range: entry)') &
 }
 
 // ============================================================
-// 4. 22 枚纯图标弧形悬浮带（横贯超出 100vw）
+// 4. 26 枚圆盘行进正弦波 + 滚动横向视差 + 宣言流光打字机
 // ============================================================
 const BOUNCER_PATHS = [
   '<circle cx="12" cy="12" r="9"/><circle cx="12" cy="12" r="2.5"/>',
@@ -790,16 +1165,121 @@ const BOUNCER_PATHS = [
   '<polyline points="4 17 10 11 4 5"/><line x1="12" y1="19" x2="20" y2="19"/>'
 ];
 
+const bouncerSection = document.querySelector('.bouncer-section');
 const bouncerStrip = document.getElementById('bouncer-strip');
-for (let i = 0; i < 22; i++) {
+const bouncerDiscs = [];
+
+for (let i = 0; i < 26; i++) {
+  const li = document.createElement('li');
+  li.className = 'bouncer-item';
   const disc = document.createElement('div');
   disc.className = 'bouncer-disc';
-  const norm = (i / 21) * 2 - 1; // -1..1
-  const arcY = (norm * norm) * 44 - 16;
-  disc.style.setProperty('--arc-y', `${arcY.toFixed(1)}px`);
-  disc.innerHTML = `<svg width="30" height="30" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">${BOUNCER_PATHS[i % BOUNCER_PATHS.length]}</svg>`;
-  bouncerStrip.appendChild(disc);
+  disc.innerHTML = `<svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">${BOUNCER_PATHS[i % BOUNCER_PATHS.length]}</svg>`;
+  li.appendChild(disc);
+  bouncerStrip.appendChild(li);
+  bouncerDiscs.push(disc);
 }
+
+let bouncerOffsets = [];
+function measureBouncerOffsets() {
+  const listLeft = bouncerStrip.getBoundingClientRect().left;
+  bouncerOffsets = bouncerDiscs.map((d) => {
+    const r = d.getBoundingClientRect();
+    return r.left - listLeft + r.width / 2;
+  });
+}
+measureBouncerOffsets();
+window.addEventListener('resize', measureBouncerOffsets, { passive: true });
+
+let bouncerWaveVisible = true;
+let bouncerWavePhase = 0;
+let bouncerRaf = 0;
+let bouncerLastTime = performance.now();
+
+function applyBouncerWave(phasePx) {
+  const wavelength = Math.max(960, window.innerWidth);
+  for (let i = 0; i < bouncerDiscs.length; i++) {
+    const cx = bouncerOffsets[i] ?? i * 106;
+    const angle = ((cx + phasePx) / wavelength) * Math.PI * 2;
+    const y = Math.sin(angle) * 35;
+    bouncerDiscs[i].style.transform = `translate3d(0, ${y.toFixed(2)}px, 0)`;
+  }
+}
+
+applyBouncerWave(0);
+
+startBouncerWave = () => {
+  if (bouncerRaf) return;
+  bouncerLastTime = performance.now();
+  const loop = (now) => {
+    const dt = Math.min(0.05, (now - bouncerLastTime) / 1000);
+    bouncerLastTime = now;
+    if (bouncerWaveVisible && !userPausedMotion) {
+      const wavelength = Math.max(960, window.innerWidth);
+      bouncerWavePhase = (bouncerWavePhase + (dt / 7.0) * wavelength) % wavelength;
+      applyBouncerWave(bouncerWavePhase);
+    }
+    bouncerRaf = requestAnimationFrame(loop);
+  };
+  bouncerRaf = requestAnimationFrame(loop);
+};
+
+stopBouncerWave = () => {
+  if (bouncerRaf) {
+    cancelAnimationFrame(bouncerRaf);
+    bouncerRaf = 0;
+  }
+};
+
+if (!userPausedMotion) startBouncerWave();
+
+const bouncerObserver = new IntersectionObserver((entries) => {
+  for (const e of entries) bouncerWaveVisible = e.isIntersecting;
+}, { rootMargin: '100px 0px', threshold: 0 });
+bouncerObserver.observe(bouncerSection);
+
+// 滚动水平视差（x: +125px -> -125px，总行程 250px）
+const updateBouncerScrub = () => {
+  const rect = bouncerSection.getBoundingClientRect();
+  const vh = window.innerHeight || 900;
+  const progress = Math.max(0, Math.min(1, (vh - rect.top) / (vh + rect.height)));
+  const shiftX = 125 - progress * 250;
+  bouncerStrip.style.transform = `translate3d(${shiftX.toFixed(1)}px, 0, 0)`;
+};
+updateBouncerScrub();
+window.addEventListener('scroll', updateBouncerScrub, { passive: true });
+
+// 宣言流光竖线打字机入场
+const statementEl = document.querySelector('.editorial-statement');
+const statementTextEl = document.getElementById('statement-text');
+const statementCaretEl = document.getElementById('statement-caret');
+const fullStatement = statementTextEl.getAttribute('data-full-text') || statementTextEl.textContent;
+let statementTyped = false;
+
+const statementObserver = new IntersectionObserver((entries) => {
+  for (const entry of entries) {
+    if (!entry.isIntersecting || statementTyped) continue;
+    statementTyped = true;
+    statementObserver.disconnect();
+    if (reducedMotionQuery.matches || userPausedMotion) {
+      statementTextEl.textContent = fullStatement;
+      statementCaretEl.classList.add('is-done');
+      return;
+    }
+    let idx = 0;
+    statementTextEl.textContent = '';
+    statementCaretEl.classList.remove('is-done');
+    const typeTimer = setInterval(() => {
+      idx++;
+      statementTextEl.textContent = fullStatement.slice(0, idx);
+      if (idx >= fullStatement.length) {
+        clearInterval(typeTimer);
+        setTimeout(() => statementCaretEl.classList.add('is-done'), 600);
+      }
+    }, 24);
+  }
+}, { rootMargin: '0px 0px -18% 0px', threshold: 0.1 });
+statementObserver.observe(statementEl);
 
 // ============================================================
 // 5. 预览台色点切换、材质切换、歌词切换与 28 点阵交互
