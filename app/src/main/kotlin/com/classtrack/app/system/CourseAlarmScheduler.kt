@@ -10,6 +10,7 @@ import android.net.Uri
 import android.os.Build
 import android.os.PowerManager
 import android.provider.Settings
+import android.util.Log
 import androidx.core.app.NotificationManagerCompat
 import com.classtrack.app.MainActivity
 import com.classtrack.app.data.DataRepository
@@ -48,11 +49,13 @@ object CourseAlarmScheduler {
     const val EVENT_CLASS_START = "CLASS_START"
     const val EVENT_CLASS_END = "CLASS_END"
 
+    private const val TAG = "ClassTrackAlarm"
     private const val BASE_REQUEST_CODE = 10000
     private const val MAX_ALARM_SLOTS = 24
     private const val ALARM_SHOW_INTENT_REQUEST_CODE = 10099
+    private const val RECOVERY_ALARM_REQUEST_CODE = 19998
     private const val LIVE_TICK_REQUEST_CODE = 19999
-    private const val ALARM_CLOCK_LOOKAHEAD_HOURS = 36L
+    private const val ALARM_CLOCK_LOOKAHEAD_HOURS = 48L
 
     private val TIME_FORMATTER: DateTimeFormatter = DateTimeFormatter.ofPattern("HH:mm")
 
@@ -107,7 +110,7 @@ object CourseAlarmScheduler {
     }
 
     /**
-     * 根据精确时间推导未来 7 天的三态关键节点（课前 / 上课 / 下课），供调度器与单元测试共用
+     * 根据精确时间推导未来 14 天的三态关键节点（课前 / 上课 / 下课），供调度器与单元测试共用
      */
     fun collectUpcomingMilestones(
         courses: List<CourseItem>,
@@ -121,7 +124,7 @@ object CourseAlarmScheduler {
         val normalizedLead = leadMinutes.coerceIn(1, 60).toLong()
         val milestones = mutableListOf<ScheduledMilestone>()
 
-        for (dayOffset in 0L..7L) {
+        for (dayOffset in 0L..14L) {
             val targetDate = now.toLocalDate().plusDays(dayOffset)
             val targetDayOfWeek = targetDate.dayOfWeek.value
             val weekForDate = weekForDateResolver(targetDate)
@@ -210,19 +213,45 @@ object CourseAlarmScheduler {
         return ((nowMillis / 60_000L) + 1L) * 60_000L + 150L
     }
 
+    internal fun milestoneKey(milestone: ScheduledMilestone): String =
+        "${milestone.sessionKey}_${milestone.eventType}"
+
+    /**
+     * 选出应当使用 AlarmManager.setAlarmClock() 的关键节点，保证在国产系统严格冻结机制下仍能准时唤醒：
+     * 1. 窗口内最近的第 1 个任意事件节点（含 PRE_CLASS / CLASS_START / CLASS_END）；
+     * 2. 若第 1 个节点不是课前预热，则同时保留窗口内下一门课的首个 PRE_CLASS。
+     */
+    internal fun selectAlarmClockMilestones(
+        milestones: List<ScheduledMilestone>,
+        cutoff: LocalDateTime
+    ): Set<String> {
+        val inWindow = milestones.filter { !it.triggerTime.isAfter(cutoff) }
+        val firstAny = inWindow.firstOrNull() ?: return emptySet()
+        val selected = linkedSetOf(milestoneKey(firstAny))
+        if (firstAny.eventType != EVENT_PRE_CLASS) {
+            val nextPreClass = inWindow.firstOrNull {
+                it.eventType == EVENT_PRE_CLASS && milestoneKey(it) != milestoneKey(firstAny)
+            }
+            if (nextPreClass != null) {
+                selected.add(milestoneKey(nextPreClass))
+            }
+        }
+        return selected
+    }
+
     /**
      * 重新规划并注册未来所有课程的硬件级 RTC 状态切换闹钟（PRE_CLASS / CLASS_START / CLASS_END）
      */
     @Synchronized
     fun rescheduleAll(context: Context) {
         val appContext = context.applicationContext
-        val repository = DataRepository(appContext)
+        val repository = DataRepository.getInstance(appContext)
 
         if (!repository.fluidCloudEnabled.value) {
             cancelAll(appContext)
             cancelLiveTick(appContext)
             CourseAlarmWatchdogJobService.cancel(appContext)
-            _nextReminderInfo.value = "自动推送已关闭（流体云主开关未开启）"
+            _nextReminderInfo.value = "自动推送已关闭（上课实况提醒未开启）"
             return
         }
 
@@ -250,21 +279,17 @@ object CourseAlarmScheduler {
 
         if (upcomingMilestones.isEmpty()) {
             _nextReminderInfo.value = "近期暂无待上课程（第${repository.getEffectiveCurrentWeek()}周课表空闲）"
+            Log.i(TAG, "未来 14 天暂无待调度课程")
             return
         }
 
         val alarmManager = appContext.getSystemService(Context.ALARM_SERVICE) as AlarmManager
         val zoneId = ZoneId.systemDefault()
         val alarmClockCutoff = now.plusHours(ALARM_CLOCK_LOOKAHEAD_HOURS)
-
-        // 仅对最近 36 小时内首个未到来的课前/上课节点启用 setAlarmClock()，避免多枚系统闹钟冲突同时穿透 ColorOS 墓碑
-        val primaryAlarmClockTarget = if (alarmClockPriority && readiness.canScheduleExactAlarms) {
-            upcomingMilestones.firstOrNull { milestone ->
-                (milestone.eventType == EVENT_PRE_CLASS || milestone.eventType == EVENT_CLASS_START) &&
-                    !milestone.triggerTime.isAfter(alarmClockCutoff)
-            }
+        val alarmClockKeys = if (alarmClockPriority && readiness.canScheduleExactAlarms) {
+            selectAlarmClockMilestones(upcomingMilestones, alarmClockCutoff)
         } else {
-            null
+            emptySet()
         }
 
         val showAppPendingIntent = PendingIntent.getActivity(
@@ -296,9 +321,10 @@ object CourseAlarmScheduler {
                 PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
             )
 
-            runCatching {
+            val isAlarmClockTarget = milestoneKey(milestone) in alarmClockKeys
+            try {
                 when {
-                    milestone === primaryAlarmClockTarget -> {
+                    isAlarmClockTarget -> {
                         val info = AlarmManager.AlarmClockInfo(triggerMillis, showAppPendingIntent)
                         alarmManager.setAlarmClock(info, pendingIntent)
                     }
@@ -307,6 +333,19 @@ object CourseAlarmScheduler {
                     }
                     else -> {
                         alarmManager.setAndAllowWhileIdle(AlarmManager.RTC_WAKEUP, triggerMillis, pendingIntent)
+                    }
+                }
+            } catch (error: Throwable) {
+                Log.e(
+                    TAG,
+                    "注册课程闹钟失败 (${milestone.eventType} @ ${milestone.triggerTime}): ${error.message}",
+                    error
+                )
+                if (isAlarmClockTarget && readiness.canScheduleExactAlarms) {
+                    runCatching {
+                        alarmManager.setExactAndAllowWhileIdle(AlarmManager.RTC_WAKEUP, triggerMillis, pendingIntent)
+                    }.onFailure { fallbackError ->
+                        Log.e(TAG, "降级注册精确闹钟同样失败: ${fallbackError.message}", fallbackError)
                     }
                 }
             }
@@ -338,13 +377,62 @@ object CourseAlarmScheduler {
             if (!readiness.areNotificationsEnabled) add("通知未开启")
             if (!readiness.canScheduleExactAlarms) add("未授权精确闹钟")
             if (!readiness.isIgnoringBatteryOptimizations) add("建议允许后台运行")
-            if (primaryAlarmClockTarget != null) add("高优先级唤醒已启用")
+            if (alarmClockKeys.isNotEmpty()) add("高优先级唤醒已启用")
         }.joinToString(" · ")
 
         _nextReminderInfo.value = if (diagnosticSuffix.isBlank()) {
             summaryPrefix
         } else {
             "$summaryPrefix（$diagnosticSuffix）"
+        }
+        Log.i(
+            TAG,
+            "已调度 ${upcomingMilestones.take(MAX_ALARM_SLOTS).size} 枚课程节点 (alarmClockCount=${alarmClockKeys.size}) -> ${_nextReminderInfo.value}"
+        )
+    }
+
+    /**
+     * 活跃课程窗口内若应用卡片被划掉，2 秒后通过强力闹钟重新恢复前台保活提醒
+     */
+    fun scheduleImmediateRecoveryAlarm(context: Context, delayMs: Long = 2_000L) {
+        val appContext = context.applicationContext
+        val alarmManager = appContext.getSystemService(Context.ALARM_SERVICE) as AlarmManager
+        val readiness = inspectReadiness(appContext)
+        val repository = DataRepository.getInstance(appContext)
+        val triggerMillis = System.currentTimeMillis() + delayMs.coerceAtLeast(1_000L)
+
+        val intent = Intent(appContext, CourseReminderReceiver::class.java).apply {
+            action = ColorOsFluidCloudHelper.ACTION_CHECK_ACTIVE_REMINDER
+        }
+        val pendingIntent = PendingIntent.getBroadcast(
+            appContext,
+            RECOVERY_ALARM_REQUEST_CODE,
+            intent,
+            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+        )
+        val showAppPendingIntent = PendingIntent.getActivity(
+            appContext,
+            ALARM_SHOW_INTENT_REQUEST_CODE,
+            Intent(appContext, MainActivity::class.java).apply {
+                flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP
+            },
+            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+        )
+
+        runCatching {
+            when {
+                repository.alarmClockPriorityEnabled.value && readiness.canScheduleExactAlarms -> {
+                    alarmManager.setAlarmClock(AlarmManager.AlarmClockInfo(triggerMillis, showAppPendingIntent), pendingIntent)
+                }
+                readiness.canScheduleExactAlarms -> {
+                    alarmManager.setExactAndAllowWhileIdle(AlarmManager.RTC_WAKEUP, triggerMillis, pendingIntent)
+                }
+                else -> {
+                    alarmManager.setAndAllowWhileIdle(AlarmManager.RTC_WAKEUP, triggerMillis, pendingIntent)
+                }
+            }
+        }.onFailure { error ->
+            Log.e(TAG, "注册划卡自愈闹钟失败: ${error.message}", error)
         }
     }
 
@@ -353,7 +441,7 @@ object CourseAlarmScheduler {
      */
     fun scheduleNextMinuteLiveTick(context: Context) {
         val appContext = context.applicationContext
-        val repository = DataRepository(appContext)
+        val repository = DataRepository.getInstance(appContext)
         if (!repository.fluidCloudEnabled.value) {
             cancelLiveTick(appContext)
             return
@@ -378,6 +466,8 @@ object CourseAlarmScheduler {
             } else {
                 alarmManager.setAndAllowWhileIdle(AlarmManager.RTC_WAKEUP, nextTickMillis, pendingIntent)
             }
+        }.onFailure { error ->
+            Log.w(TAG, "注册分钟心跳闹钟失败: ${error.message}")
         }
     }
 

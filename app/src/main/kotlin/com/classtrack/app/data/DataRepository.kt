@@ -689,6 +689,15 @@ class DataRepository(context: Context) {
     }
 
     companion object {
+        @Volatile
+        private var instance: DataRepository? = null
+
+        fun getInstance(context: Context): DataRepository {
+            return instance ?: synchronized(this) {
+                instance ?: DataRepository(context.applicationContext).also { instance = it }
+            }
+        }
+
         fun resolveEffectiveWeek(
             semesterStartMonday: LocalDate,
             targetDate: LocalDate,

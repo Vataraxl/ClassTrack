@@ -58,7 +58,7 @@ class ClassTrackWidgetProvider : AppWidgetProvider() {
             appWidgetManager: AppWidgetManager,
             appWidgetId: Int
         ) {
-            val repo = DataRepository(context)
+            val repo = DataRepository.getInstance(context)
             val theme = repo.artistTheme.value
             val currentWeek = repo.currentWeek.value
             val todayDay = LocalDate.now().dayOfWeek.value

@@ -39,7 +39,7 @@ data class UiStyleTransitionEvent(
 
 class MainScreenViewModel(application: Application) : AndroidViewModel(application) {
 
-    private val repository = DataRepository(application)
+    private val repository = DataRepository.getInstance(application)
 
     val artistTheme: StateFlow<ArtistTheme> = repository.artistTheme
     val customThemeConfig: StateFlow<CustomThemeConfig> = repository.customThemeConfig

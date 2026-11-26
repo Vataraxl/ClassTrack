@@ -158,4 +158,53 @@ class CourseTimelineStateTest {
         assertEquals(10, DataRepository.resolveEffectiveWeek(week1Monday, LocalDate.of(2026, 11, 15), 18))
         assertEquals(11, DataRepository.resolveEffectiveWeek(week1Monday, LocalDate.of(2026, 11, 16), 18))
     }
+
+    @Test
+    fun selectAlarmClockMilestones_protectsClassEndAndNextPreClass() {
+        val fridayMorning = CourseItem(
+            id = 202L,
+            name = "微观经济学",
+            room = "求索305",
+            teacher = "李老师",
+            dayOfWeek = 5,
+            startSection = 10,
+            endSection = 11,
+            startWeek = 1,
+            endWeek = 16
+        )
+        // 当前正值周四 18:45（无机化学课中），下一节在周五
+        val now = LocalDateTime.of(2026, 11, 12, 18, 45, 0)
+        val milestones = CourseAlarmScheduler.collectUpcomingMilestones(
+            courses = listOf(chemistryCourse, fridayMorning),
+            timeSlots = eveningSlots,
+            leadMinutes = 20,
+            now = now,
+            weekForDateResolver = { 10 }
+        )
+
+        val selected = CourseAlarmScheduler.selectAlarmClockMilestones(
+            milestones = milestones,
+            cutoff = now.plusHours(48)
+        )
+
+        val chemEndKey = "${LocalDate.of(2026, 11, 12)}_101_10_${CourseAlarmScheduler.EVENT_CLASS_END}"
+        val friPreKey = "${LocalDate.of(2026, 11, 13)}_202_10_${CourseAlarmScheduler.EVENT_PRE_CLASS}"
+        assertEquals(setOf(chemEndKey, friPreKey), selected)
+    }
+
+    @Test
+    fun collectUpcomingMilestones_scansAcrossTwoWeeksForBiweeklyCourses() {
+        val fridayAfterClass = LocalDateTime.of(2026, 11, 13, 21, 0, 0)
+        val milestones = CourseAlarmScheduler.collectUpcomingMilestones(
+            courses = listOf(chemistryCourse),
+            timeSlots = eveningSlots,
+            leadMinutes = 20,
+            now = fridayAfterClass,
+            weekForDateResolver = { date -> if (date.isBefore(LocalDate.of(2026, 11, 16))) 10 else 11 }
+        )
+        // 确认覆盖下周与下下周（> 7 天）的周四课程
+        val distinctDates = milestones.map { it.triggerTime.toLocalDate() }.distinct()
+        assertTrue(distinctDates.contains(LocalDate.of(2026, 11, 19)))
+        assertTrue(distinctDates.contains(LocalDate.of(2026, 11, 26)))
+    }
 }

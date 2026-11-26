@@ -17,11 +17,10 @@ import android.graphics.drawable.Icon
 import android.net.Uri
 import android.os.Build
 import android.os.Bundle
-import android.os.Handler
-import android.os.Looper
 import android.os.PowerManager
 import android.os.UserManager
 import android.provider.Settings
+import android.util.Log
 import android.widget.RemoteViews
 import androidx.core.app.NotificationCompat
 import com.classtrack.app.MainActivity
@@ -36,9 +35,13 @@ import java.time.LocalDate
 import java.time.LocalDateTime
 import java.util.Locale
 import kotlin.math.roundToInt
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.launch
 import org.json.JSONArray
 import org.json.JSONObject
 
@@ -110,9 +113,8 @@ object ColorOsFluidCloudHelper {
 
     private const val DOT_COUNT = 28
     private const val WAKE_LOCK_TAG = "ClassTrack:CourseRtcWakeLock"
+    private const val ALARM_LOG_TAG = "ClassTrackAlarm"
 
-    private val islandCarouselHandler = Handler(Looper.getMainLooper())
-    private var islandCarouselRunnable: Runnable? = null
     private var sessionFixedWhenMs: Long = 0L
     private var cachedVinylKey: String = ""
     private var cachedVinylBitmap: Bitmap? = null
@@ -268,7 +270,7 @@ object ColorOsFluidCloudHelper {
         referenceNow: LocalDateTime = LocalDateTime.now()
     ): FluidCloudDiagnostics? {
         val appContext = context.applicationContext
-        val repository = DataRepository(appContext)
+        val repository = DataRepository.getInstance(appContext)
         if (!repository.fluidCloudEnabled.value) {
             cancelFluidCloudNotification(appContext)
             CourseAlarmScheduler.cancelLiveTick(appContext)
@@ -306,13 +308,11 @@ object ColorOsFluidCloudHelper {
             startLiveUpdates = true
         )
 
-        // 仅在首次非静默唤醒（课前触发或跨状态主动提醒）时向 OPPO Watch X2 发送腕上脉冲提醒
+        // 仅在首次非静默唤醒（课前触发或跨状态主动提醒）时向穿戴设备发送腕上脉冲提醒
         if (!isSilentUpdate && repository.watchBridgeEnabled.value) {
             postWatchBridgeNotification(appContext, activeTrack, sessionKey)
         }
 
-        // 确保下一整分钟 :00.150 秒准时推送新一帧
-        CourseAlarmScheduler.scheduleNextMinuteLiveTick(appContext)
         return diagnostics
     }
 
@@ -321,7 +321,7 @@ object ColorOsFluidCloudHelper {
      */
     fun triggerAutoBackgroundFluidCloud(context: Context) {
         val appContext = context.applicationContext
-        val repository = DataRepository(appContext)
+        val repository = DataRepository.getInstance(appContext)
         if (!repository.fluidCloudEnabled.value) return
 
         val now = LocalDateTime.now()
@@ -351,7 +351,6 @@ object ColorOsFluidCloudHelper {
             isSilentUpdate = true,
             startLiveUpdates = true
         )
-        CourseAlarmScheduler.scheduleNextMinuteLiveTick(appContext)
     }
 
     /**
@@ -436,7 +435,7 @@ object ColorOsFluidCloudHelper {
         val appContext = context.applicationContext
         ensureNotificationChannel(appContext)
         val manager = appContext.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
-        val repository = DataRepository(appContext)
+        val repository = DataRepository.getInstance(appContext)
         val resolvedStyle = cardStyle ?: repository.notificationCardStyle.value
 
         val effectiveOs = if (preferredOsFamily == LiveCapsuleOsFamily.AUTO) {
@@ -527,15 +526,13 @@ object ColorOsFluidCloudHelper {
             progressPercent = progressCurrent
         )
 
-        // 仅在「状态栏实况胶囊」模式按需开启实时动态轮播；「极简点阵流体卡」依靠硬件 RTC 整分钟心跳即可，零多余唤醒
-        if (startLiveUpdates && resolvedStyle == NotificationCardStyle.LIVE_CAPSULE) {
-            startLiveCapsuleLoop(
-                context = appContext,
-                preferredOsFamily = preferredOsFamily
-            )
-        } else if (resolvedStyle == NotificationCardStyle.DOT_CARD) {
-            stopIslandCarousel(resetPreview = false)
-            FluidCloudForegroundService.stopCarousel(appContext)
+        // 活跃课程窗口统一交由 FluidCloudForegroundService 保活并同步整分与亮屏校准；若后台拉起受限，退回精确闹钟心跳兜底
+        if (startLiveUpdates) {
+            val fgsStarted = FluidCloudForegroundService.startCarousel(appContext)
+            if (!fgsStarted) {
+                Log.w(ALARM_LOG_TAG, "后台启动前台保活服务受限，降级启用精确闹钟整分心跳")
+                CourseAlarmScheduler.scheduleNextMinuteLiveTick(appContext)
+            }
         }
 
         val summary = when (resolvedStyle) {
@@ -563,7 +560,7 @@ object ColorOsFluidCloudHelper {
         preferredOsFamily: LiveCapsuleOsFamily = LiveCapsuleOsFamily.AUTO,
         carouselFrameIndex: Int = 0,
         isCarouselTick: Boolean = false,
-        cardStyle: NotificationCardStyle = DataRepository(context.applicationContext).notificationCardStyle.value,
+        cardStyle: NotificationCardStyle = DataRepository.getInstance(context.applicationContext).notificationCardStyle.value,
         sessionKey: String = ""
     ): Notification {
         val appContext = context.applicationContext
@@ -977,56 +974,7 @@ object ColorOsFluidCloudHelper {
         }
     }
 
-    /**
-     * 实况胶囊状态栏轮播循环（每轮均重新从 DataRepository 计算实时系统时间状态，彻底杜绝冻帧）
-     */
-    private fun startLiveCapsuleLoop(
-        context: Context,
-        preferredOsFamily: LiveCapsuleOsFamily
-    ) {
-        stopIslandCarousel(resetPreview = false)
-        FluidCloudForegroundService.startCarousel(context)
-
-        var step = 1
-        val runnable = object : Runnable {
-            override fun run() {
-                if (step > 360) return
-                val repository = DataRepository(context)
-                if (!repository.fluidCloudEnabled.value ||
-                    repository.notificationCardStyle.value != NotificationCardStyle.LIVE_CAPSULE
-                ) {
-                    return
-                }
-                val liveTrack = repository.resolveActiveOrUpcomingTrack(
-                    now = LocalDateTime.now(),
-                    leadMinutes = repository.leadMinutes.value,
-                    respectDismissed = true
-                )
-                if (liveTrack != null && liveTrack.playState != TrackPlayState.COMPLETED) {
-                    postFluidCloudTrackNotification(
-                        context = context,
-                        track = liveTrack,
-                        artistTheme = repository.artistTheme.value,
-                        watchBridgeEnabled = repository.watchBridgeEnabled.value,
-                        preferredOsFamily = preferredOsFamily,
-                        carouselFrameIndex = step,
-                        isCarouselTick = true,
-                        cardStyle = NotificationCardStyle.LIVE_CAPSULE,
-                        isSilentUpdate = true,
-                        startLiveUpdates = false
-                    )
-                    step++
-                    islandCarouselHandler.postDelayed(this, 4500L)
-                }
-            }
-        }
-        islandCarouselRunnable = runnable
-        islandCarouselHandler.postDelayed(runnable, 3000L)
-    }
-
     private fun stopIslandCarousel(resetPreview: Boolean = true) {
-        islandCarouselRunnable?.let { islandCarouselHandler.removeCallbacks(it) }
-        islandCarouselRunnable = null
         if (resetPreview) {
             _islandPreviewState.value = IslandLivePreviewState(isActive = false)
         }
@@ -1543,113 +1491,130 @@ object ColorOsFluidCloudHelper {
 }
 
 class CourseReminderReceiver : BroadcastReceiver() {
+
+    companion object {
+        private const val TAG = "ClassTrackAlarm"
+        private val receiverScope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
+    }
+
     override fun onReceive(context: Context, intent: Intent?) {
         val appContext = context.applicationContext
         val action = intent?.action ?: return
 
+        val userUnlocked = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.N) {
+            appContext.getSystemService(UserManager::class.java)?.isUserUnlocked ?: true
+        } else {
+            true
+        }
+        if (!userUnlocked) {
+            Log.i(TAG, "收到广播 $action，但设备尚未解锁，安排解锁后重试")
+            CourseAlarmWatchdogJobService.scheduleUnlockRetry(appContext)
+            return
+        }
+
+        val pendingResult = goAsync()
         val powerManager = appContext.getSystemService(Context.POWER_SERVICE) as? PowerManager
         val wakeLock = powerManager?.newWakeLock(PowerManager.PARTIAL_WAKE_LOCK, "ClassTrack:RtcReceiverLock")
-        runCatching { wakeLock?.acquire(8_000L) }
+        runCatching { wakeLock?.acquire(10_000L) }
 
-        try {
-            when (action) {
-                ColorOsFluidCloudHelper.ACTION_DISMISS_FLUID_CLOUD -> {
-                    val sessionKey = intent.getStringExtra(CourseAlarmScheduler.EXTRA_SESSION_KEY).orEmpty()
-                    if (sessionKey.isNotBlank()) {
-                        DataRepository(appContext).markSessionDismissed(sessionKey)
-                    }
-                    ColorOsFluidCloudHelper.cancelFluidCloudNotification(appContext)
-                    CourseAlarmScheduler.cancelLiveTick(appContext)
-                }
-
-                ColorOsFluidCloudHelper.ACTION_TRIGGER_COURSE_REMINDER -> {
-                    val eventType = intent.getStringExtra(CourseAlarmScheduler.EXTRA_EVENT_TYPE)
-                        ?: CourseAlarmScheduler.EVENT_PRE_CLASS
-                    val targetCourseId = intent.getLongExtra(CourseAlarmScheduler.EXTRA_COURSE_ID, -1L)
-
-                    when (eventType) {
-                        CourseAlarmScheduler.EVENT_CLASS_END -> {
-                            // 本节下课节点：补偿毫秒级系统早到偏差，确认下课后收起或顺延下一节
-                            ColorOsFluidCloudHelper.postOrUpdateActiveLiveReminder(
-                                context = appContext,
-                                isSilentUpdate = true,
-                                referenceNow = LocalDateTime.now().plusSeconds(3)
-                            )
+        receiverScope.launch {
+            try {
+                when (action) {
+                    ColorOsFluidCloudHelper.ACTION_DISMISS_FLUID_CLOUD -> {
+                        val sessionKey = intent.getStringExtra(CourseAlarmScheduler.EXTRA_SESSION_KEY).orEmpty()
+                        if (sessionKey.isNotBlank()) {
+                            DataRepository.getInstance(appContext).markSessionDismissed(sessionKey)
                         }
-
-                        CourseAlarmScheduler.EVENT_CLASS_START -> {
-                            // 准点开课节点：立即将通知切换为「X分钟后下课」+ 点亮实时点阵进度（静默无打扰切入上课态）
-                            ColorOsFluidCloudHelper.postOrUpdateActiveLiveReminder(
-                                context = appContext,
-                                isSilentUpdate = true,
-                                targetCourseId = targetCourseId,
-                                referenceNow = LocalDateTime.now().plusSeconds(3)
-                            )
-                        }
-
-                        else -> {
-                            // 课前提前提醒节点：首发脉冲提醒 + 穿戴手表同步 + 开启每分钟精准刷新链
-                            ColorOsFluidCloudHelper.postOrUpdateActiveLiveReminder(
-                                context = appContext,
-                                isSilentUpdate = false,
-                                targetCourseId = targetCourseId,
-                                allowAnyUpcomingToday = true,
-                                referenceNow = LocalDateTime.now().plusSeconds(3)
-                            )
-                        }
+                        ColorOsFluidCloudHelper.cancelFluidCloudNotification(appContext)
+                        CourseAlarmScheduler.cancelLiveTick(appContext)
+                        Log.i(TAG, "用户已确认到教室，收起实况通知 sessionKey=$sessionKey")
                     }
 
-                    // 将后续最近的节点晋升为强力 AlarmClock 闹钟，保证下一节点永不失联
-                    CourseAlarmScheduler.rescheduleAll(appContext)
-                }
+                    ColorOsFluidCloudHelper.ACTION_TRIGGER_COURSE_REMINDER -> {
+                        val eventType = intent.getStringExtra(CourseAlarmScheduler.EXTRA_EVENT_TYPE)
+                            ?: CourseAlarmScheduler.EVENT_PRE_CLASS
+                        val targetCourseId = intent.getLongExtra(CourseAlarmScheduler.EXTRA_COURSE_ID, -1L)
+                        Log.i(TAG, "触发课程闹钟节点: eventType=$eventType, courseId=$targetCourseId")
 
-                ColorOsFluidCloudHelper.ACTION_LIVE_TICK_FLUID_CLOUD -> {
-                    // 严格对齐状态栏 :00.150 秒心跳：永远基于当前真实现实时间重算
-                    ColorOsFluidCloudHelper.postOrUpdateActiveLiveReminder(
-                        context = appContext,
-                        isSilentUpdate = true
-                    )
-                }
+                        when (eventType) {
+                            CourseAlarmScheduler.EVENT_CLASS_END -> {
+                                ColorOsFluidCloudHelper.postOrUpdateActiveLiveReminder(
+                                    context = appContext,
+                                    isSilentUpdate = true,
+                                    referenceNow = LocalDateTime.now().plusSeconds(3)
+                                )
+                            }
 
-                ColorOsFluidCloudHelper.ACTION_CHECK_ACTIVE_REMINDER -> {
-                    CourseAlarmScheduler.rescheduleAll(appContext)
-                    ColorOsFluidCloudHelper.postOrUpdateActiveLiveReminder(
-                        context = appContext,
-                        isSilentUpdate = true
-                    )
-                }
+                            CourseAlarmScheduler.EVENT_CLASS_START -> {
+                                ColorOsFluidCloudHelper.postOrUpdateActiveLiveReminder(
+                                    context = appContext,
+                                    isSilentUpdate = true,
+                                    targetCourseId = targetCourseId,
+                                    referenceNow = LocalDateTime.now().plusSeconds(3)
+                                )
+                            }
 
-                ColorOsFluidCloudHelper.ACTION_TEST_WATCH_BRIDGE -> {
-                    ColorOsFluidCloudHelper.sendWatchTestNotification(appContext)
-                }
-
-                Intent.ACTION_BOOT_COMPLETED,
-                Intent.ACTION_LOCKED_BOOT_COMPLETED,
-                Intent.ACTION_MY_PACKAGE_REPLACED,
-                Intent.ACTION_TIME_CHANGED,
-                Intent.ACTION_TIMEZONE_CHANGED,
-                AlarmManager.ACTION_SCHEDULE_EXACT_ALARM_PERMISSION_STATE_CHANGED -> {
-                    val userUnlocked = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.N) {
-                        appContext.getSystemService(UserManager::class.java)?.isUserUnlocked ?: true
-                    } else {
-                        true
-                    }
-                    if (userUnlocked) {
-                        runCatching {
-                            CourseAlarmScheduler.rescheduleAll(appContext)
-                            ColorOsFluidCloudHelper.postOrUpdateActiveLiveReminder(
-                                context = appContext,
-                                isSilentUpdate = true
-                            )
+                            else -> {
+                                ColorOsFluidCloudHelper.postOrUpdateActiveLiveReminder(
+                                    context = appContext,
+                                    isSilentUpdate = false,
+                                    targetCourseId = targetCourseId,
+                                    allowAnyUpcomingToday = true,
+                                    referenceNow = LocalDateTime.now().plusSeconds(3)
+                                )
+                            }
                         }
+
+                        CourseAlarmScheduler.rescheduleAll(appContext)
+                    }
+
+                    ColorOsFluidCloudHelper.ACTION_LIVE_TICK_FLUID_CLOUD -> {
+                        ColorOsFluidCloudHelper.postOrUpdateActiveLiveReminder(
+                            context = appContext,
+                            isSilentUpdate = true
+                        )
+                    }
+
+                    ColorOsFluidCloudHelper.ACTION_CHECK_ACTIVE_REMINDER -> {
+                        Log.i(TAG, "执行后台自检与闹钟恢复")
+                        ColorOsFluidCloudHelper.postOrUpdateActiveLiveReminder(
+                            context = appContext,
+                            isSilentUpdate = true
+                        )
+                        CourseAlarmScheduler.rescheduleAll(appContext)
+                    }
+
+                    ColorOsFluidCloudHelper.ACTION_TEST_WATCH_BRIDGE -> {
+                        ColorOsFluidCloudHelper.sendWatchTestNotification(appContext)
+                    }
+
+                    Intent.ACTION_BOOT_COMPLETED,
+                    Intent.ACTION_LOCKED_BOOT_COMPLETED,
+                    Intent.ACTION_MY_PACKAGE_REPLACED,
+                    Intent.ACTION_TIME_CHANGED,
+                    Intent.ACTION_TIMEZONE_CHANGED,
+                    AlarmManager.ACTION_SCHEDULE_EXACT_ALARM_PERMISSION_STATE_CHANGED -> {
+                        Log.i(TAG, "收到系统环境变更广播: $action")
+                        CourseAlarmWatchdogJobService.ensureScheduled(
+                            appContext,
+                            forceRefresh = action == Intent.ACTION_MY_PACKAGE_REPLACED
+                        )
+                        ColorOsFluidCloudHelper.postOrUpdateActiveLiveReminder(
+                            context = appContext,
+                            isSilentUpdate = true
+                        )
+                        CourseAlarmScheduler.rescheduleAll(appContext)
                     }
                 }
-            }
-        } finally {
-            runCatching {
-                if (wakeLock?.isHeld == true) {
-                    wakeLock.release()
+            } catch (t: Throwable) {
+                Log.e(TAG, "处理广播 $action 时发生异常: ${t.message}", t)
+            } finally {
+                runCatching {
+                    if (wakeLock?.isHeld == true) {
+                        wakeLock.release()
+                    }
                 }
+                runCatching { pendingResult.finish() }
             }
         }
     }
