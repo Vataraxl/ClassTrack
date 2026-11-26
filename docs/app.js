@@ -1,13 +1,37 @@
 // ============================================================
-// 1. 精确取自 ClassTrack 源码的 7 套音乐人专辑主题数据
+// 1. 精确取自 ClassTrack 源码的 7 套音乐人专辑主题与预置高校数据
 // ============================================================
 const ARTIST_THEMES = [
+  {
+    id: 'ZTMY',
+    displayName: '真夜霓虹',
+    artistName: 'ずっと真夜中でいいのに。',
+    badgeText: 'ZTMY · MIDNIGHT',
+    genreLabel: '日音',
+    isDark: true,
+    bg: '#0B0D14',
+    surface: '#131722',
+    surfaceVariant: '#1C2232',
+    primary: '#10E898',
+    secondary: '#FF477E',
+    tertiary: '#8B5CF6',
+    text: '#F3F5FA',
+    border: '#232A3E',
+    glassBg: 'rgba(19, 23, 34, 0.72)',
+    glassBorder: 'rgba(255, 255, 255, 0.22)',
+    tracks: ['#1E1B3A', '#0F2E28', '#33182C', '#132842', '#332417', '#1B2436'],
+    accents: ['#A78BFA', '#34D399', '#FB7185', '#38BDF8', '#FBBF24', '#818CF8'],
+    spectrum: ['#10E898', '#FF477E', '#8B5CF6'],
+    lyrics: [
+      { song: '秒針を噛む · Track 01', line: 'このまま奪って隠して忘れたい、分かり合う○と×もなくて。' },
+      { song: 'お勉強しといてよ · Study Mode', line: '理性的な感情論が綺麗で、また迷ってしまうけど。' }
+    ]
+  },
   {
     id: 'JAY_CHOU',
     displayName: '叶惠美·范特西',
     artistName: '周杰伦 (Jay Chou)',
     badgeText: 'JAY · FANTASY',
-    genre: 'MANDOPOP',
     genreLabel: '华语',
     isDark: false,
     bg: '#FAF6EE',
@@ -17,13 +41,12 @@ const ARTIST_THEMES = [
     secondary: '#235347',
     tertiary: '#991B1B',
     text: '#211A14',
-    muted: '#786B5E',
     border: '#E6DEC8',
     glassBg: 'rgba(255, 252, 246, 0.78)',
     glassBorder: 'rgba(255, 255, 255, 0.92)',
     tracks: ['#FEF3E2', '#E8F3EE', '#FCECEB', '#EDF1F8', '#F5EEF9', '#F4EFE6'],
     accents: ['#B45309', '#1E5643', '#B91C1C', '#2A4E82', '#6B3FA0', '#7C4D25'],
-    spectrum: ['#B45309', '#235347', '#991B1B', '#D97706'],
+    spectrum: ['#B45309', '#235347', '#991B1B'],
     lyrics: [
       { song: '晴天 · 校园晴空', line: '故事的小黄花，从出生那年就飘着，童年的荡秋千，随记忆一直晃到现在。' },
       { song: '七里香 · 夏日诗篇', line: '窗外的麻雀在电线杆上多嘴，你说这一句很有夏天的感觉。' }
@@ -34,7 +57,6 @@ const ARTIST_THEMES = [
     displayName: '黑色柳丁',
     artistName: '陶喆 (David Tao)',
     badgeText: 'TAO · SOUL R&B',
-    genre: 'MANDOPOP',
     genreLabel: '华语',
     isDark: true,
     bg: '#0C0D12',
@@ -44,13 +66,12 @@ const ARTIST_THEMES = [
     secondary: '#F59E0B',
     tertiary: '#38BDF8',
     text: '#F8F9FC',
-    muted: '#949AB1',
     border: '#272C3F',
     glassBg: 'rgba(21, 23, 32, 0.72)',
     glassBorder: 'rgba(255, 255, 255, 0.20)',
     tracks: ['#331C12', '#2E2412', '#122738', '#231834', '#122C24', '#2E1622'],
     accents: ['#FF7A2E', '#FBBF24', '#38BDF8', '#A78BFA', '#34D399', '#FB7185'],
-    spectrum: ['#FF6B1A', '#F59E0B', '#38BDF8', '#FB7185'],
+    spectrum: ['#FF6B1A', '#F59E0B', '#38BDF8'],
     lyrics: [
       { song: '黑色柳丁 · 摇滚觉醒', line: '今天我心情有一点怪怪的，可是说不出到底为什么，好像有一些悲伤的征兆。' },
       { song: '普通朋友 · Acoustic R&B', line: '等待，我随时随地在等待，做你感情上的依赖，我没有任何的疑问，这是爱。' }
@@ -61,7 +82,6 @@ const ARTIST_THEMES = [
     displayName: '午夜星辰',
     artistName: 'Taylor Swift',
     badgeText: 'SWIFT · MIDNIGHTS',
-    genre: 'ENGLISH',
     genreLabel: '欧美',
     isDark: true,
     bg: '#0D1226',
@@ -71,13 +91,12 @@ const ARTIST_THEMES = [
     secondary: '#A78BFA',
     tertiary: '#38BDF8',
     text: '#F8F7FF',
-    muted: '#9BA3C7',
     border: '#283463',
     glassBg: 'rgba(21, 28, 56, 0.72)',
     glassBorder: 'rgba(255, 255, 255, 0.22)',
     tracks: ['#321A36', '#221C42', '#142847', '#143036', '#33261A', '#341827'],
     accents: ['#F472B6', '#C084FC', '#60A5FA', '#2DD4BF', '#FBBF24', '#FB7185'],
-    spectrum: ['#F472B6', '#A78BFA', '#38BDF8', '#2DD4BF'],
+    spectrum: ['#F472B6', '#A78BFA', '#38BDF8'],
     lyrics: [
       { song: 'Lavender Haze · Midnights', line: 'Meet me at midnight, staring at the ceiling with you, oh you don\'t ever say too much.' },
       { song: 'Lover · Pastel Sky', line: 'Can I go where you go? Can we always be this close forever and ever?' }
@@ -88,7 +107,6 @@ const ARTIST_THEMES = [
     displayName: '超新星金属',
     artistName: 'aespa (에스파)',
     badgeText: 'AESPA · SUPERNOVA',
-    genre: 'KPOP',
     genreLabel: 'K-Pop',
     isDark: true,
     bg: '#090B10',
@@ -98,43 +116,15 @@ const ARTIST_THEMES = [
     secondary: '#22D3EE',
     tertiary: '#F43F5E',
     text: '#F4F6FB',
-    muted: '#8C96B2',
     border: '#262D45',
     glassBg: 'rgba(18, 21, 33, 0.72)',
     glassBorder: 'rgba(255, 255, 255, 0.22)',
     tracks: ['#26173E', '#102A36', '#331528', '#17223B', '#122E28', '#2A2136'],
     accents: ['#C084FC', '#22D3EE', '#FB7185', '#818CF8', '#34D399', '#E879F9'],
-    spectrum: ['#C084FC', '#22D3EE', '#F43F5E', '#818CF8'],
+    spectrum: ['#C084FC', '#22D3EE', '#F43F5E'],
     lyrics: [
       { song: 'Supernova · Hyperstellar', line: 'Event horizon, 사건의 지평선 너머로, Supernova! Nova, can\'t stop hyperstellar.' },
       { song: 'Whiplash · Think Fast', line: 'One look give \'em Whiplash! Beat drop with a big flash, 집중해 좀 더 Think fast.' }
-    ]
-  },
-  {
-    id: 'ZTMY',
-    displayName: '真夜霓虹',
-    artistName: 'ずっと真夜中でいいのに。',
-    badgeText: 'ZTMY · MIDNIGHT',
-    genre: 'JPOP',
-    genreLabel: '日音',
-    isDark: true,
-    bg: '#0B0D14',
-    surface: '#131722',
-    surfaceVariant: '#1C2232',
-    primary: '#10E898',
-    secondary: '#FF477E',
-    tertiary: '#8B5CF6',
-    text: '#F3F5FA',
-    muted: '#8A94AD',
-    border: '#232A3E',
-    glassBg: 'rgba(19, 23, 34, 0.72)',
-    glassBorder: 'rgba(255, 255, 255, 0.22)',
-    tracks: ['#1E1B3A', '#0F2E28', '#33182C', '#132842', '#332417', '#1B2436'],
-    accents: ['#A78BFA', '#34D399', '#FB7185', '#38BDF8', '#FBBF24', '#818CF8'],
-    spectrum: ['#10E898', '#FF477E', '#8B5CF6', '#38BDF8'],
-    lyrics: [
-      { song: '秒針を噛む · Track 01', line: 'このまま奪って隠して忘れたい、分かり合う○と×もなくて。' },
-      { song: 'お勉強しといてよ · Study Mode', line: '理性的な感情論が綺麗で、また迷ってしまうけど。' }
     ]
   },
   {
@@ -142,7 +132,6 @@ const ARTIST_THEMES = [
     displayName: '盗作之夏',
     artistName: 'ヨルシカ (Yorushika)',
     badgeText: 'YORUSHIKA · SUMMER',
-    genre: 'JPOP',
     genreLabel: '日音',
     isDark: false,
     bg: '#F5F7FA',
@@ -152,13 +141,12 @@ const ARTIST_THEMES = [
     secondary: '#0D9488',
     tertiary: '#E15B45',
     text: '#0F172A',
-    muted: '#64748B',
     border: '#E2E8F0',
     glassBg: 'rgba(255, 255, 255, 0.80)',
     glassBorder: 'rgba(255, 255, 255, 0.94)',
     tracks: ['#EBF3FE', '#E6F7F4', '#FEF0ED', '#EEF0FF', '#FEF7E6', '#EAF6FA'],
     accents: ['#1D4ED8', '#0F766E', '#C2410C', '#4338CA', '#B45309', '#0369A1'],
-    spectrum: ['#2563EB', '#0D9488', '#E15B45', '#38BDF8'],
+    spectrum: ['#2563EB', '#0D9488', '#E15B45'],
     lyrics: [
       { song: '晴る · Sunny Breeze', line: '晴れに晴れ、花よ咲け、咲いて春のせい。' },
       { song: '春泥棒 · Spring Thief', line: '花見をしよう、散る花びらを拾うように時間を数えよう。' }
@@ -169,7 +157,6 @@ const ARTIST_THEMES = [
     displayName: '落日微风',
     artistName: '藤井 風 (Fujii Kaze)',
     badgeText: 'KAZE · GROOVE',
-    genre: 'JPOP',
     genreLabel: '日音',
     isDark: false,
     bg: '#F9F6F0',
@@ -179,13 +166,12 @@ const ARTIST_THEMES = [
     secondary: '#2B6E4E',
     tertiary: '#C88A4B',
     text: '#1F1A16',
-    muted: '#786E65',
     border: '#E6DFD3',
     glassBg: 'rgba(255, 252, 246, 0.80)',
     glassBorder: 'rgba(255, 255, 255, 0.94)',
     tracks: ['#FCEEE9', '#E7F3EC', '#FBF3E0', '#F2ECF8', '#E8F2F5', '#F5ECE4'],
     accents: ['#C84328', '#1E5E3F', '#9E6B14', '#5E3F7A', '#1F6378', '#7D4829'],
-    spectrum: ['#D95338', '#2B6E4E', '#C88A4B', '#1F6378'],
+    spectrum: ['#D95338', '#2B6E4E', '#C88A4B'],
     lyrics: [
       { song: '満ちてゆく · Overflowing', line: '手を放す、軽くなる、満ちてゆく。' },
       { song: 'きらり · Kirari Groove', line: '新しい日々も拙い過去も、全部がきらり。' }
@@ -193,27 +179,27 @@ const ARTIST_THEMES = [
   }
 ];
 
-const ANTIGRAVITY_SPECTRUM = ['#2c64ed', '#f84242', '#ffcf03', '#10e898'];
-const DARK_CTA_SPECTRUM = ['#7189ff', '#3074f9', '#10e898'];
+const ANTIGRAVITY_LIGHT_COLORS = ['#2c64ed', '#f84242', '#ffcf03'];
+const ANTIGRAVITY_DARK_COLORS = ['#7189ff', '#3074f9', '#05070e'];
 
 const UNIVERSITY_PORTALS = [
-  { school: '对外经济贸易大学', system: '强智教务', category: '强智' },
-  { school: '对外经贸 bkjw 新端', system: 'UIBE 本科教务', category: '综合' },
-  { school: '北京林业大学', system: '强智教务', category: '强智' },
-  { school: '中国农业大学', system: '强智/综合', category: '强智' },
-  { school: '北京邮电大学', system: '正方/综合', category: '正方' },
-  { school: '北京航空航天大学', system: '综合教务', category: '综合' },
-  { school: '北京理工大学', system: '金智/综合', category: '综合' },
-  { school: '中国人民大学', system: '金智/综合', category: '综合' },
-  { school: '北京师范大学', system: '青果教务', category: '综合' },
-  { school: '北京科技大学', system: '强智教务', category: '强智' },
-  { school: '北京交通大学', system: '树维/URP', category: '综合' },
-  { school: '浙江大学', system: '新正方教务', category: '正方' },
-  { school: '武汉大学', system: '新正方/综合', category: '正方' },
-  { school: '华中科技大学', system: '综合教务', category: '综合' },
-  { school: '复旦大学', system: '复旦教务', category: '综合' },
-  { school: '上海交通大学', system: '上交综合', category: '综合' },
-  { school: '南京大学', system: '南大教务', category: '综合' }
+  ['对外经济贸易大学', '强智教务'],
+  ['对外经贸 bkjw 新端', 'UIBE 本科教务'],
+  ['北京林业大学', '强智教务'],
+  ['中国农业大学', '强智/综合'],
+  ['北京邮电大学', '正方/综合'],
+  ['北京航空航天大学', '综合教务'],
+  ['北京理工大学', '金智/综合'],
+  ['中国人民大学', '金智/综合'],
+  ['北京师范大学', '青果教务'],
+  ['北京科技大学', '强智教务'],
+  ['北京交通大学', '树维/URP'],
+  ['浙江大学', '新正方教务'],
+  ['武汉大学', '新正方/综合'],
+  ['华中科技大学', '综合教务'],
+  ['复旦大学', '复旦教务'],
+  ['上海交通大学', '上交综合'],
+  ['南京大学', '南大教务']
 ];
 
 const WORKSHOP_TABS = {
@@ -221,107 +207,315 @@ const WORKSHOP_TABS = {
     btnText: '复制构建命令',
     code: `git clone https://github.com/Vataraxl/ClassTrack.git
 cd ClassTrack
-./gradlew assembleDebug
-# 产物位于 app/build/outputs/apk/debug/app-debug.apk`
+./gradlew assembleDebug`
   },
   theme: {
     btnText: '复制自定义主题 JSON',
     code: `{
   "themeName": "群青夜游",
-  "artistName": "YOASOBI / 自定义音乐人",
+  "artistName": "YOASOBI",
   "isDark": true,
   "primaryHex": "#38BDF8",
   "secondaryHex": "#F43F5E",
   "tertiaryHex": "#A855F7",
-  "backgroundHex": "#0B1021",
-  "trackBackgroundHexList": ["#172554", "#3B0764", "#4C0519", "#064E3B"]
+  "backgroundHex": "#0B1021"
 }`
   },
   stack: {
     btnText: '复制技术栈清单',
-    code: `Language: Kotlin 2.3.20 · JVM Toolchain 21
-Build:    AGP 9.0.1 · Gradle 9.1 · minSdk 26 · targetSdk 36
-UI:       Jetpack Compose (BOM 2026.03.01) · Material 3 · Navigation 3
-Storage:  100% 本地 SQLite & SharedPreferences · kotlinx.serialization 1.8.0`
+    code: `Kotlin 2.3.20 · JVM 21 · AGP 9.0.1 · Gradle 9.1
+Jetpack Compose (BOM 2026.03.01) · Material 3 · Navigation 3
+minSdk 26 · compileSdk 36 · 100% 本地 SQLite`
   }
 };
 
 // ============================================================
-// 2. ParticleRingField 120Hz 胶囊粒子环引擎
+// 2. 原生 WebGL GLSL 粒子星环引擎 (1:1 复刻 MainParticlesComponent)
 // ============================================================
-class ParticleRingField {
+const NOISE_GLSL = `
+vec3 mod289(vec3 x) { return x - floor(x * (1.0 / 289.0)) * 289.0; }
+vec4 mod289(vec4 x) { return x - floor(x * (1.0 / 289.0)) * 289.0; }
+vec4 permute(vec4 x) { return mod289(((x * 34.0) + 1.0) * x); }
+vec4 taylorInvSqrt(vec4 r) { return 1.79284291400159 - 0.85373472095314 * r; }
+float snoise(vec3 v) {
+  const vec2 C = vec2(1.0 / 6.0, 1.0 / 3.0);
+  const vec4 D = vec4(0.0, 0.5, 1.0, 2.0);
+  vec3 i = floor(v + dot(v, C.yyy));
+  vec3 x0 = v - i + dot(i, C.xxx);
+  vec3 g = step(x0.yzx, x0.xyz);
+  vec3 l = 1.0 - g;
+  vec3 i1 = min(g.xyz, l.zxy);
+  vec3 i2 = max(g.xyz, l.zxy);
+  vec3 x1 = x0 - i1 + C.xxx;
+  vec3 x2 = x0 - i2 + C.yyy;
+  vec3 x3 = x0 - D.yyy;
+  i = mod289(i);
+  vec4 p = permute(permute(permute(
+    i.z + vec4(0.0, i1.z, i2.z, 1.0))
+    + i.y + vec4(0.0, i1.y, i2.y, 1.0))
+    + i.x + vec4(0.0, i1.x, i2.x, 1.0));
+  float n_ = 0.142857142857;
+  vec3 ns = n_ * D.wyz - D.xzx;
+  vec4 j = p - 49.0 * floor(p * ns.z * ns.z);
+  vec4 x_ = floor(j * ns.z);
+  vec4 y_ = floor(j - 7.0 * x_);
+  vec4 x = x_ * ns.x + ns.yyyy;
+  vec4 y = y_ * ns.x + ns.yyyy;
+  vec4 h = 1.0 - abs(x) - abs(y);
+  vec4 b0 = vec4(x.xy, y.xy);
+  vec4 b1 = vec4(x.zw, y.zw);
+  vec4 s0 = floor(b0) * 2.0 + 1.0;
+  vec4 s1 = floor(b1) * 2.0 + 1.0;
+  vec4 sh = -step(h, vec4(0.0));
+  vec4 a0 = b0.xzyw + s0.xzyw * sh.xxyy;
+  vec4 a1 = b1.xzyw + s1.xzyw * sh.zzww;
+  vec3 p0 = vec3(a0.xy, h.x);
+  vec3 p1 = vec3(a0.zw, h.y);
+  vec3 p2 = vec3(a1.xy, h.z);
+  vec3 p3 = vec3(a1.zw, h.w);
+  vec4 norm = taylorInvSqrt(vec4(dot(p0, p0), dot(p1, p1), dot(p2, p2), dot(p3, p3)));
+  p0 *= norm.x; p1 *= norm.y; p2 *= norm.z; p3 *= norm.w;
+  vec4 m = max(0.6 - vec4(dot(x0, x0), dot(x1, x1), dot(x2, x2), dot(x3, x3)), 0.0);
+  m = m * m;
+  return 42.0 * dot(m * m, vec4(dot(p0, x0), dot(p1, x1), dot(p2, x2), dot(p3, x3)));
+}`;
+
+const VERT_SRC = `
+precision highp float;
+attribute vec4 aParticle;
+uniform float uAspect;
+uniform float uPixelRatio;
+uniform float uParticleScale;
+varying vec2 vLocalPos;
+varying float vScale;
+varying float vVelocity;
+
+void main() {
+  vLocalPos = aParticle.xy;
+  vScale = aParticle.z;
+  vVelocity = aParticle.w;
+  gl_Position = vec4(aParticle.x / uAspect, aParticle.y, 0.0, 1.0);
+  gl_PointSize = clamp((vScale * 8.2) * (uPixelRatio * 0.65) * uParticleScale, 1.8, 28.0);
+}`;
+
+const FRAG_SRC = `
+precision highp float;
+varying vec2 vLocalPos;
+varying float vScale;
+varying float vVelocity;
+uniform vec3 uColor1;
+uniform vec3 uColor2;
+uniform vec3 uColor3;
+uniform vec2 uRingPos;
+uniform float uTime;
+uniform float uAlpha;
+uniform float uIsLight;
+${NOISE_GLSL}
+
+float sdRoundBox(in vec2 p, in vec2 b, in vec4 r) {
+  r.xy = (p.x > 0.0) ? r.xy : r.zw;
+  r.x = (p.y > 0.0) ? r.x : r.y;
+  vec2 q = abs(p) - b + r.x;
+  return min(max(q.x, q.y), 0.0) + length(max(q, 0.0)) - r.x;
+}
+
+vec2 rotate2d(vec2 v, float a) {
+  float s = sin(a);
+  float c = cos(a);
+  return mat2(c, s, -s, c) * v;
+}
+
+void main() {
+  float noiseAngle = snoise(vec3(vLocalPos * 5.2 + vec2(18.4924, 72.9744), uTime * 0.65));
+  float noiseColor = snoise(vec3(vLocalPos * 1.15 + vec2(74.664, 91.556), uTime * 0.35));
+  noiseColor = (noiseColor + 1.0) * 0.5;
+
+  float angle = atan(vLocalPos.y - uRingPos.y, vLocalPos.x - uRingPos.x);
+  vec2 uv = gl_PointCoord.xy - vec2(0.5);
+  uv.y *= -1.0;
+  uv = rotate2d(uv, -angle + (noiseAngle * 0.45));
+
+  float h = 0.72;
+  float progress = smoothstep(0.05, 0.92, pow(noiseColor, 1.35));
+  vec3 col = mix(
+    mix(uColor1, uColor2, clamp(progress / h, 0.0, 1.0)),
+    mix(uColor2, uColor3, clamp((progress - h) / (1.0 - h), 0.0, 1.0)),
+    step(h, progress)
+  );
+
+  float rounded = sdRoundBox(uv, vec2(0.46, 0.19), vec4(0.22));
+  rounded = smoothstep(0.11, 0.0, rounded);
+
+  float a = uAlpha * rounded * smoothstep(0.08, 0.25, vScale);
+  if (a < 0.015) discard;
+
+  vec3 finalCol = clamp(col, 0.0, 1.0);
+  if (uIsLight > 0.5) {
+    finalCol = mix(finalCol * 1.1, finalCol * clamp(0.86 + vVelocity * 0.35, 0.86, 1.05), 0.25);
+  }
+  gl_FragColor = vec4(finalCol * a, a);
+}`;
+
+function hexToRgbNorm(hex) {
+  const clean = hex.replace('#', '');
+  const n = parseInt(clean.length === 3 ? clean.split('').map((c) => c + c).join('') : clean, 16);
+  return [((n >> 16) & 255) / 255, ((n >> 8) & 255) / 255, (n & 255) / 255];
+}
+
+function smoothstep(edge0, edge1, x) {
+  const t = Math.max(0, Math.min(1, (x - edge0) / (edge1 - edge0)));
+  return t * t * (3 - 2 * t);
+}
+
+class WebGLParticleField {
   constructor(canvas, options = {}) {
     this.canvas = canvas;
-    this.ctx = canvas.getContext('2d');
-    this.mode = options.mode || 'hero'; // 'hero' | 'ring' | 'dark'
-    this.colors = options.colors || ANTIGRAVITY_SPECTRUM;
-    this.particles = [];
-    this.pointer = { x: 0.5, y: 0.5, active: false };
-    this.ringCenter = { x: 0.5, y: 0.5 };
+    this.theme = options.theme || 'light'; // 'light' | 'dark'
+    this.ringMode = options.ringMode || 'hero'; // 'hero' | 'halo' | 'split' | 'dark'
+    this.colors = (options.colors || ANTIGRAVITY_LIGHT_COLORS).map(hexToRgbNorm);
+    this.particleScale = options.particleScale || 1.0;
+
+    this.dpr = Math.min(window.devicePixelRatio || 1, 2);
     this.width = 0;
     this.height = 0;
-    this.dpr = 1;
+    this.aspect = 1;
+    this.count = 0;
+    this.refs = null;
+    this.simData = null;
+
+    this.pointer = { x: 0, y: 0, active: false };
+    this.ringPos = { x: 0, y: 0 };
+    this.time = 0;
     this.isVisible = true;
     this.running = false;
     this.rafId = 0;
-    this.time = 0;
+
+    this.gl = canvas.getContext('webgl', {
+      alpha: true,
+      antialias: true,
+      powerPreference: 'high-performance'
+    });
+
+    if (this.gl) {
+      this.initGL();
+    } else {
+      this.ctx2d = canvas.getContext('2d');
+    }
 
     this.resize();
-    this.seedParticles();
-    this.renderFrame(0);
+    this.seedPoints();
+    this.stepSimulation(0);
+    this.draw();
   }
 
-  setColors(colors) {
-    this.colors = colors;
-    for (let i = 0; i < this.particles.length; i++) {
-      this.particles[i].color = colors[i % colors.length];
-    }
-    if (!this.running) {
-      this.renderFrame(this.time);
-    }
+  initGL() {
+    const gl = this.gl;
+    const compile = (type, src) => {
+      const s = gl.createShader(type);
+      gl.shaderSource(s, src);
+      gl.compileShader(s);
+      if (!gl.getShaderParameter(s, gl.COMPILE_STATUS)) {
+        throw new Error(gl.getShaderInfoLog(s));
+      }
+      return s;
+    };
+    const prog = gl.createProgram();
+    gl.attachShader(prog, compile(gl.VERTEX_SHADER, VERT_SRC));
+    gl.attachShader(prog, compile(gl.FRAGMENT_SHADER, FRAG_SRC));
+    gl.linkProgram(prog);
+    gl.useProgram(prog);
+
+    this.program = prog;
+    this.buffer = gl.createBuffer();
+    this.locAttr = gl.getAttribLocation(prog, 'aParticle');
+    this.uAspect = gl.getUniformLocation(prog, 'uAspect');
+    this.uPixelRatio = gl.getUniformLocation(prog, 'uPixelRatio');
+    this.uParticleScale = gl.getUniformLocation(prog, 'uParticleScale');
+    this.uColor1 = gl.getUniformLocation(prog, 'uColor1');
+    this.uColor2 = gl.getUniformLocation(prog, 'uColor2');
+    this.uColor3 = gl.getUniformLocation(prog, 'uColor3');
+    this.uRingPos = gl.getUniformLocation(prog, 'uRingPos');
+    this.uTime = gl.getUniformLocation(prog, 'uTime');
+    this.uAlpha = gl.getUniformLocation(prog, 'uAlpha');
+    this.uIsLight = gl.getUniformLocation(prog, 'uIsLight');
+
+    gl.enable(gl.BLEND);
+    gl.blendFunc(gl.ONE, gl.ONE_MINUS_SRC_ALPHA);
+  }
+
+  setColors(hexList) {
+    this.colors = hexList.slice(0, 3).map(hexToRgbNorm);
+    if (!this.running) this.draw();
   }
 
   resize() {
-    const rect = this.canvas.parentElement.getBoundingClientRect();
+    const parent = this.canvas.parentElement;
+    if (!parent) return;
+    const rect = parent.getBoundingClientRect();
     this.dpr = Math.min(window.devicePixelRatio || 1, 2);
-    this.width = Math.max(320, Math.round(rect.width));
-    this.height = Math.max(320, Math.round(rect.height));
+    this.width = Math.max(280, Math.round(rect.width));
+    this.height = Math.max(280, Math.round(rect.height));
+    this.aspect = this.width / this.height;
     this.canvas.width = Math.round(this.width * this.dpr);
     this.canvas.height = Math.round(this.height * this.dpr);
-    this.ctx.setTransform(this.dpr, 0, 0, this.dpr, 0, 0);
+    if (this.gl) {
+      this.gl.viewport(0, 0, this.canvas.width, this.canvas.height);
+    } else if (this.ctx2d) {
+      this.ctx2d.setTransform(this.dpr, 0, 0, this.dpr, 0, 0);
+    }
   }
 
-  seedParticles() {
-    const isNarrow = this.width < 680;
-    const cols = isNarrow ? 24 : 38;
-    const rows = isNarrow ? 20 : 30;
-    this.particles = [];
+  seedPoints() {
+    const isNarrow = this.width < 700;
+    const cols = this.ringMode === 'hero' || this.ringMode === 'dark'
+      ? (isNarrow ? 34 : 76)
+      : (isNarrow ? 28 : 48);
+    const rows = this.ringMode === 'hero' || this.ringMode === 'dark'
+      ? (isNarrow ? 38 : 48)
+      : (isNarrow ? 28 : 42);
+
+    this.count = cols * rows;
+    this.refs = new Float32Array(this.count * 2);
+    this.simData = new Float32Array(this.count * 4);
+
+    const spanX = this.aspect * 1.12;
+    const spanY = 1.12;
+    let idx = 0;
 
     for (let r = 0; r < rows; r++) {
       for (let c = 0; c < cols; c++) {
-        // 确定性抖动网格模拟泊松盘均匀分布
-        const seed1 = Math.sin(r * 12.9898 + c * 78.233) * 43758.5453;
-        const seed2 = Math.sin(r * 39.346 + c * 11.135) * 24634.6345;
-        const jx = seed1 - Math.floor(seed1) - 0.5;
-        const jy = seed2 - Math.floor(seed2) - 0.5;
-        const nx = (c + 0.5 + jx * 0.85) / cols;
-        const ny = (r + 0.5 + jy * 0.85) / rows;
-        const idx = r * cols + c;
-        this.particles.push({
-          nx,
-          ny,
-          phase: (seed1 - Math.floor(seed1)) * Math.PI * 2,
-          color: this.colors[idx % this.colors.length]
-        });
+        const s1 = Math.sin(r * 12.9898 + c * 78.233) * 43758.5453;
+        const s2 = Math.sin(r * 39.346 + c * 11.135) * 24634.6345;
+        const jx = s1 - Math.floor(s1) - 0.5;
+        const jy = s2 - Math.floor(s2) - 0.5;
+
+        const rx = (((c + 0.5 + jx * 0.9) / cols) * 2 - 1) * spanX;
+        const ry = (((r + 0.5 + jy * 0.9) / rows) * 2 - 1) * spanY;
+
+        this.refs[idx * 2] = rx;
+        this.refs[idx * 2 + 1] = ry;
+        this.simData[idx * 4] = rx;
+        this.simData[idx * 4 + 1] = ry;
+        this.simData[idx * 4 + 2] = 0.25;
+        this.simData[idx * 4 + 3] = 0.5;
+        idx++;
       }
+    }
+
+    if (this.gl) {
+      const gl = this.gl;
+      gl.bindBuffer(gl.ARRAY_BUFFER, this.buffer);
+      gl.bufferData(gl.ARRAY_BUFFER, this.simData, gl.DYNAMIC_DRAW);
     }
   }
 
   updatePointer(clientX, clientY) {
     const rect = this.canvas.getBoundingClientRect();
     if (!rect.width || !rect.height) return;
-    this.pointer.x = Math.max(0.15, Math.min(0.85, (clientX - rect.left) / rect.width));
-    this.pointer.y = Math.max(0.15, Math.min(0.85, (clientY - rect.top) / rect.height));
+    const nx = ((clientX - rect.left) / rect.width) * 2 - 1;
+    const ny = -(((clientY - rect.top) / rect.height) * 2 - 1);
+    this.pointer.x = nx * this.aspect * 0.55;
+    this.pointer.y = ny * 0.55;
     this.pointer.active = true;
   }
 
@@ -329,17 +523,116 @@ class ParticleRingField {
     this.pointer.active = false;
   }
 
+  stepSimulation(t) {
+    const idleX = Math.sin(t * 0.42) * 0.18;
+    const idleY = Math.cos(t * 0.34) * 0.11;
+    const tx = this.pointer.active ? this.pointer.x : idleX;
+    const ty = this.pointer.active ? this.pointer.y : idleY;
+    const lerp = this.pointer.active ? 0.032 : 0.015;
+
+    this.ringPos.x += (tx - this.ringPos.x) * lerp;
+    this.ringPos.y += (ty - this.ringPos.y) * lerp;
+
+    const baseR = this.ringMode === 'halo' ? 0.48 : (this.ringMode === 'split' ? 0.48 : 0.56);
+    const ringRadius = baseR + Math.sin(t * 0.95) * 0.06 + Math.cos(t * 2.6) * 0.035;
+    const ringWidth = this.ringMode === 'halo' ? 0.24 : 0.27;
+    const ringWidth2 = this.ringMode === 'halo' ? 0.12 : 0.11;
+    const dispAmp = this.ringMode === 'halo' ? 0.18 : 0.11;
+
+    for (let i = 0; i < this.count; i++) {
+      const rx = this.refs[i * 2];
+      const ry = this.refs[i * 2 + 1];
+
+      const dx = rx - this.ringPos.x;
+      const dy = ry - this.ringPos.y;
+      const dist = Math.hypot(dx, dy) || 0.0001;
+
+      const waveDispX = Math.sin(rx * 6.5 + t * 1.1) * 0.018 + Math.cos(ry * 12.0 - t * 0.7) * 0.007;
+      const waveDispY = Math.cos(ry * 6.5 + t * 0.9) * 0.018 + Math.sin(rx * 12.0 + t * 0.7) * 0.007;
+
+      const bandOuter = smoothstep(ringRadius - ringWidth * 1.7, ringRadius, dist) -
+        smoothstep(ringRadius, ringRadius + ringWidth, dist);
+      const bandSharp = smoothstep(ringRadius - ringWidth2 * 1.8, ringRadius, dist) -
+        smoothstep(ringRadius, ringRadius + ringWidth2, dist);
+      const innerSoft = this.ringMode === 'halo'
+        ? 0.0
+        : smoothstep(ringRadius + ringWidth2, ringRadius, dist) * 0.18;
+
+      let targetScale = Math.pow(bandOuter, 1.8) * 0.85 + Math.pow(bandSharp, 2.2) * 1.45 + innerSoft;
+      if (this.ringMode !== 'halo') {
+        targetScale += 0.24; // 背景细微星尘基底
+      } else if (dist < ringRadius * 0.56) {
+        targetScale *= smoothstep(ringRadius * 0.42, ringRadius * 0.65, dist); // OAuth 弹窗中心留白
+      }
+
+      const prevScale = this.simData[i * 4 + 2];
+      const nextScale = prevScale + (targetScale - prevScale) * 0.22;
+
+      const pull = Math.pow(Math.max(0, bandSharp), 0.75) * dispAmp;
+      const fx = rx + waveDispX + (dx / dist) * pull;
+      const fy = ry + waveDispY + (dy / dist) * pull;
+
+      this.simData[i * 4] = fx;
+      this.simData[i * 4 + 1] = fy;
+      this.simData[i * 4 + 2] = nextScale;
+      this.simData[i * 4 + 3] = Math.min(1, nextScale * 0.65);
+    }
+  }
+
+  draw() {
+    if (this.gl) {
+      const gl = this.gl;
+      gl.useProgram(this.program);
+      gl.clearColor(0, 0, 0, 0);
+      gl.clear(gl.COLOR_BUFFER_BIT);
+
+      gl.bindBuffer(gl.ARRAY_BUFFER, this.buffer);
+      gl.bufferSubData(gl.ARRAY_BUFFER, 0, this.simData);
+      gl.enableVertexAttribArray(this.locAttr);
+      gl.vertexAttribPointer(this.locAttr, 4, gl.FLOAT, false, 0, 0);
+
+      gl.uniform1f(this.uAspect, this.aspect);
+      gl.uniform1f(this.uPixelRatio, this.dpr);
+      gl.uniform1f(this.uParticleScale, this.particleScale);
+      gl.uniform3fv(this.uColor1, this.colors[0]);
+      gl.uniform3fv(this.uColor2, this.colors[1]);
+      gl.uniform3fv(this.uColor3, this.colors[2]);
+      gl.uniform2f(this.uRingPos, this.ringPos.x, this.ringPos.y);
+      gl.uniform1f(this.uTime, this.time);
+      gl.uniform1f(this.uAlpha, 1.0);
+      gl.uniform1f(this.uIsLight, this.theme === 'light' ? 1.0 : 0.0);
+
+      gl.drawArrays(gl.POINTS, 0, this.count);
+      return;
+    }
+
+    // 极简 Canvas2D 降级
+    const ctx = this.ctx2d;
+    ctx.clearRect(0, 0, this.width, this.height);
+    for (let i = 0; i < this.count; i += 2) {
+      const x = (this.simData[i * 4] / this.aspect * 0.5 + 0.5) * this.width;
+      const y = (-this.simData[i * 4 + 1] * 0.5 + 0.5) * this.height;
+      const s = this.simData[i * 4 + 2];
+      const [r, g, b] = this.colors[i % 3];
+      ctx.fillStyle = `rgba(${Math.round(r * 255)},${Math.round(g * 255)},${Math.round(b * 255)},${Math.min(0.85, s * 0.55)})`;
+      ctx.beginPath();
+      ctx.arc(x, y, Math.max(1, s * 1.8), 0, Math.PI * 2);
+      ctx.fill();
+    }
+  }
+
   start() {
     if (this.running) return;
     this.running = true;
-    let lastTs = performance.now();
+    let last = performance.now();
     const tick = (now) => {
       if (!this.running) return;
-      const dt = Math.min(0.05, (now - lastTs) / 1000);
-      lastTs = now;
+      const dt = Math.min(0.05, (now - last) / 1000);
+      last = now;
       if (this.isVisible) {
         this.time += dt;
-        this.renderFrame(this.time);
+        this.stepSimulation(this.time);
+        this.draw();
       }
       this.rafId = requestAnimationFrame(tick);
     };
@@ -353,107 +646,52 @@ class ParticleRingField {
       this.rafId = 0;
     }
   }
-
-  renderFrame(t) {
-    const ctx = this.ctx;
-    const w = this.width;
-    const h = this.height;
-    ctx.clearRect(0, 0, w, h);
-
-    // 环心惯性追随指针或李萨如飘浮
-    const idleX = 0.5 + Math.sin(t * 0.35) * 0.04;
-    const idleY = 0.5 + Math.cos(t * 0.27) * 0.03;
-    const targetX = this.pointer.active ? this.pointer.x : idleX;
-    const targetY = this.pointer.active ? this.pointer.y : idleY;
-    this.ringCenter.x += (targetX - this.ringCenter.x) * 0.045;
-    this.ringCenter.y += (targetY - this.ringCenter.y) * 0.045;
-
-    const minDim = Math.min(w, h);
-    const cx = this.ringCenter.x * w;
-    const cy = this.ringCenter.y * h;
-    const baseRadius = this.mode === 'ring' ? minDim * 0.32 : minDim * 0.35;
-    const ringRadius = baseRadius + minDim * (0.025 * Math.sin(t * 1.1) + 0.014 * Math.cos(t * 2.3));
-    const ringSpread = this.mode === 'ring' ? minDim * 0.14 : minDim * 0.19;
-
-    ctx.lineCap = 'round';
-
-    for (let i = 0; i < this.particles.length; i++) {
-      const p = this.particles[i];
-      const waveX = Math.sin(t * 0.8 + p.ny * 6.0 + p.phase) * 9;
-      const waveY = Math.cos(t * 0.75 + p.nx * 6.0 + p.phase) * 9;
-
-      let px = p.nx * w + waveX;
-      let py = p.ny * h + waveY;
-
-      const dx = px - cx;
-      const dy = py - cy;
-      const dist = Math.hypot(dx, dy) || 1;
-      const diff = dist - ringRadius;
-
-      // 高斯环带强度：中心留空，环带明亮
-      const band = Math.exp(-(diff * diff) / (2 * ringSpread * ringSpread));
-      const innerHole = this.mode === 'ring'
-        ? Math.min(1, Math.max(0, (dist - minDim * 0.17) / (minDim * 0.09)))
-        : Math.min(1, Math.max(0.18, (dist - minDim * 0.13) / (minDim * 0.14)));
-
-      const strength = band * innerHole;
-      if (strength < 0.08) {
-        if (this.mode !== 'ring' && (i % 5 === 0)) {
-          ctx.globalAlpha = this.mode === 'dark' ? 0.16 : 0.12;
-          ctx.strokeStyle = p.color;
-          ctx.lineWidth = 1.6;
-          ctx.beginPath();
-          ctx.moveTo(px, py);
-          ctx.lineTo(px + 1.5, py + 1.5);
-          ctx.stroke();
-        }
-        continue;
-      }
-
-      // 磁力微吸扯位移
-      const pull = (diff / dist) * band * -12;
-      px += (dx / dist) * pull;
-      py += (dy / dist) * pull;
-
-      const angle = Math.atan2(dy, dx) + Math.sin(t * 0.9 + p.phase) * 0.28;
-      const dashLen = 3.5 + strength * 7.5;
-      const lineW = 1.8 + strength * 1.4;
-      const ux = Math.cos(angle) * (dashLen * 0.5);
-      const uy = Math.sin(angle) * (dashLen * 0.5);
-
-      ctx.globalAlpha = (this.mode === 'dark' ? 0.88 : 0.78) * strength;
-      ctx.strokeStyle = p.color;
-      ctx.lineWidth = lineW;
-      ctx.beginPath();
-      ctx.moveTo(px - ux, py - uy);
-      ctx.lineTo(px + ux, py + uy);
-      ctx.stroke();
-    }
-
-    ctx.globalAlpha = 1;
-  }
 }
 
 // ============================================================
-// 3. 初始化页面交互逻辑
+// 3. 初始化全部 WebGL 粒子场、视口暂停与 Hero 滚动淡出
 // ============================================================
 const reducedMotionQuery = window.matchMedia('(prefers-reduced-motion: reduce)');
 let userPausedMotion = reducedMotionQuery.matches;
 
-const heroField = new ParticleRingField(document.getElementById('hero-canvas'), {
-  mode: 'hero',
-  colors: ANTIGRAVITY_SPECTRUM
-});
-const workshopField = new ParticleRingField(document.getElementById('workshop-canvas'), {
-  mode: 'ring',
-  colors: ANTIGRAVITY_SPECTRUM
-});
-const darkField = new ParticleRingField(document.getElementById('dark-canvas'), {
-  mode: 'dark',
-  colors: DARK_CTA_SPECTRUM
+const heroField = new WebGLParticleField(document.getElementById('hero-canvas'), {
+  theme: 'light',
+  ringMode: 'hero',
+  colors: ANTIGRAVITY_LIGHT_COLORS,
+  particleScale: 0.92
 });
 
-const allFields = [heroField, workshopField, darkField];
+const splitLeftField = new WebGLParticleField(document.getElementById('split-left-canvas'), {
+  theme: 'light',
+  ringMode: 'split',
+  colors: ANTIGRAVITY_LIGHT_COLORS,
+  particleScale: 0.88
+});
+
+const splitRightField = new WebGLParticleField(document.getElementById('split-right-canvas'), {
+  theme: 'light',
+  ringMode: 'split',
+  colors: ANTIGRAVITY_LIGHT_COLORS,
+  particleScale: 0.88
+});
+
+const darkField = new WebGLParticleField(document.getElementById('dark-canvas'), {
+  theme: 'dark',
+  ringMode: 'dark',
+  colors: ANTIGRAVITY_DARK_COLORS,
+  particleScale: 0.96
+});
+
+const dialogField = new WebGLParticleField(document.getElementById('dialog-canvas'), {
+  theme: 'light',
+  ringMode: 'halo',
+  colors: ANTIGRAVITY_LIGHT_COLORS,
+  particleScale: 0.95
+});
+dialogField.isVisible = false;
+
+const allFields = [heroField, splitLeftField, splitRightField, darkField, dialogField];
+const lightFields = [heroField, splitLeftField, splitRightField, dialogField];
 
 function syncMotionLoop() {
   const toggleBtn = document.getElementById('motion-toggle');
@@ -473,45 +711,54 @@ document.getElementById('motion-toggle').addEventListener('click', () => {
   syncMotionLoop();
 });
 
-// IntersectionObserver 控制画布视口启停（零后台功耗）
 const canvasObserver = new IntersectionObserver((entries) => {
   for (const entry of entries) {
     const field = allFields.find((f) => f.canvas === entry.target);
-    if (field) {
+    if (field && field !== dialogField) {
       field.isVisible = entry.isIntersecting;
     }
   }
-}, { threshold: 0.01 });
+}, { rootMargin: '80px 0px', threshold: 0 });
 
-allFields.forEach((f) => canvasObserver.observe(f.canvas));
+[heroField, splitLeftField, splitRightField, darkField].forEach((f) => canvasObserver.observe(f.canvas));
 
 window.addEventListener('resize', () => {
   allFields.forEach((f) => {
     f.resize();
-    f.seedParticles();
-    f.renderFrame(f.time);
+    f.seedPoints();
+    f.stepSimulation(f.time);
+    f.draw();
   });
 }, { passive: true });
 
-// 指针追踪粒子环中心
-document.querySelector('.hero-section').addEventListener('pointermove', (e) => heroField.updatePointer(e.clientX, e.clientY), { passive: true });
-document.querySelector('.hero-section').addEventListener('pointerleave', () => heroField.clearPointer());
-document.querySelector('.workshop-section').addEventListener('pointermove', (e) => workshopField.updatePointer(e.clientX, e.clientY), { passive: true });
-document.querySelector('.workshop-section').addEventListener('pointerleave', () => workshopField.clearPointer());
-document.querySelector('.dark-cta-card').addEventListener('pointermove', (e) => darkField.updatePointer(e.clientX, e.clientY), { passive: true });
-document.querySelector('.dark-cta-card').addEventListener('pointerleave', () => darkField.clearPointer());
+// 鼠标引力交互绑定
+const bindPointer = (el, field) => {
+  el.addEventListener('pointermove', (e) => field.updatePointer(e.clientX, e.clientY), { passive: true });
+  el.addEventListener('pointerleave', () => field.clearPointer());
+};
+bindPointer(document.querySelector('.hero-section'), heroField);
+bindPointer(document.querySelector('[data-split-field="left"]'), splitLeftField);
+bindPointer(document.querySelector('[data-split-field="right"]'), splitRightField);
+bindPointer(document.querySelector('.dark-cta-card'), darkField);
+bindPointer(document.getElementById('workshop-dialog-stage'), dialogField);
 
-// Header 滚动收缩降级监听（当不支持 scroll-driven animations 时）
+// Hero 粒子随向下滚动渐隐（100% 对标 antigravity.google ScrollTrigger）
+const heroSectionEl = document.querySelector('.hero-section');
+const heroCanvasEl = document.getElementById('hero-canvas');
+window.addEventListener('scroll', () => {
+  const rect = heroSectionEl.getBoundingClientRect();
+  const progress = Math.max(0, Math.min(1, -rect.top / Math.max(1, rect.height * 0.78)));
+  heroCanvasEl.style.opacity = String(1 - progress);
+}, { passive: true });
+
+// Header 收缩 & Scroll Reveal 降级
 if (!CSS.supports('(animation-timeline: scroll()) and (animation-range: 0% 100%)')) {
   const header = document.getElementById('site-header');
-  const onScrollHeader = () => {
-    header.classList.toggle('header--scrolled', window.scrollY > 40);
-  };
+  const onScrollHeader = () => header.classList.toggle('header--scrolled', window.scrollY > 40);
   onScrollHeader();
   window.addEventListener('scroll', onScrollHeader, { passive: true });
 }
 
-// 滚动入场动画降级（当不支持 view() 且无 reduced-motion 时）
 if (!CSS.supports('(animation-timeline: view()) and (animation-range: entry)') && !reducedMotionQuery.matches) {
   const revealEls = document.querySelectorAll('.reveal-on-scroll');
   revealEls.forEach((el) => el.classList.add('js-reveal-pending'));
@@ -522,47 +769,59 @@ if (!CSS.supports('(animation-timeline: view()) and (animation-range: entry)') &
         revealObserver.unobserve(entry.target);
       }
     }
-  }, { threshold: 0.12 });
+  }, { threshold: 0.1 });
   revealEls.forEach((el) => revealObserver.observe(el));
 }
 
-// 公告条关闭 & 移动端抽屉菜单
-document.getElementById('announcement-close').addEventListener('click', () => {
-  document.getElementById('announcement-bar').hidden = true;
-});
+// ============================================================
+// 4. 22 枚纯图标弧形悬浮带（横贯超出 100vw）
+// ============================================================
+const BOUNCER_PATHS = [
+  '<circle cx="12" cy="12" r="9"/><circle cx="12" cy="12" r="2.5"/>',
+  '<path d="M3 12h3l3-6 4 12 3-6h5"/>',
+  '<rect x="4" y="5" width="16" height="14" rx="4"/><path d="M8 10h8M8 14h5"/>',
+  '<rect x="3" y="8" width="18" height="8" rx="4"/><circle cx="8" cy="12" r="1.5" fill="currentColor"/>',
+  '<path d="M9 18V5l11-2v13"/><circle cx="6" cy="18" r="2.5"/><circle cx="17" cy="16" r="2.5"/>',
+  '<rect x="5" y="11" width="14" height="9" rx="2"/><path d="M8 11V7a4 4 0 0 1 8 0v4"/>',
+  '<circle cx="12" cy="13" r="7"/><path d="M12 10v3l2 2M9 3h6"/>',
+  '<path d="M4 6h16v12H4z"/><path d="M4 10h16M10 6v12"/>',
+  '<rect x="7" y="6" width="10" height="12" rx="2"/><path d="M9 6V3h6v3M9 18v3h6v-3"/>',
+  '<path d="M12 3l2.4 5.6L20 11l-5.6 2.4L12 19l-2.4-5.6L4 11l5.6-2.4z"/>',
+  '<polyline points="4 17 10 11 4 5"/><line x1="12" y1="19" x2="20" y2="19"/>'
+];
 
-const mobileDrawer = document.getElementById('mobile-drawer');
-const mobileMenuBtn = document.getElementById('mobile-menu-btn');
-mobileMenuBtn.addEventListener('click', () => {
-  mobileDrawer.showModal();
-  mobileMenuBtn.setAttribute('aria-expanded', 'true');
-});
-document.getElementById('mobile-drawer-close').addEventListener('click', () => mobileDrawer.close());
-mobileDrawer.addEventListener('close', () => mobileMenuBtn.setAttribute('aria-expanded', 'false'));
-mobileDrawer.addEventListener('click', (e) => {
-  if (e.target === mobileDrawer || e.target.tagName === 'A') {
-    mobileDrawer.close();
-  }
-});
+const bouncerStrip = document.getElementById('bouncer-strip');
+for (let i = 0; i < 22; i++) {
+  const disc = document.createElement('div');
+  disc.className = 'bouncer-disc';
+  const norm = (i / 21) * 2 - 1; // -1..1
+  const arcY = (norm * norm) * 44 - 16;
+  disc.style.setProperty('--arc-y', `${arcY.toFixed(1)}px`);
+  disc.innerHTML = `<svg width="30" height="30" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">${BOUNCER_PATHS[i % BOUNCER_PATHS.length]}</svg>`;
+  bouncerStrip.appendChild(disc);
+}
 
 // ============================================================
-// 4. 交互预览台 + 7 套专辑色板 + 28 点阵通知联动
+// 5. 预览台色点切换、材质切换、歌词切换与 28 点阵交互
 // ============================================================
-let currentTheme = ARTIST_THEMES.find((t) => t.id === 'ZTMY');
-let currentUiStyle = 'glass';
+let currentTheme = ARTIST_THEMES[0];
 let currentLyricIndex = 0;
 
 const theaterFrame = document.getElementById('theater-frame');
 const phoneShell = document.getElementById('phone-shell');
 const previewThemeBar = document.getElementById('preview-theme-bar');
 
-function buildPreviewThemeButtons() {
+function buildPreviewThemeDots() {
   previewThemeBar.innerHTML = '';
   ARTIST_THEMES.forEach((theme) => {
     const btn = document.createElement('button');
     btn.type = 'button';
-    btn.className = `theme-pill-select${theme.id === currentTheme.id ? ' is-active' : ''}`;
-    btn.textContent = theme.displayName;
+    btn.className = `theme-dot-btn${theme.id === currentTheme.id ? ' is-active' : ''}`;
+    btn.setAttribute('aria-label', `切换到 ${theme.displayName}`);
+    btn.innerHTML = `
+      <span class="theme-dot-swatch" style="background: ${theme.primary};"></span>
+      <span class="theme-dot-name">${theme.displayName}</span>
+    `;
     btn.addEventListener('click', () => applyTheme(theme.id, true));
     previewThemeBar.appendChild(btn);
   });
@@ -594,13 +853,10 @@ function applyTheme(themeId, syncParticles = false) {
   phoneShell.setAttribute('data-tone', found.isDark ? 'dark' : 'light');
   phoneShell.style.setProperty('--phone-bg', found.bg);
   phoneShell.style.setProperty('--phone-surface', found.surface);
-  phoneShell.style.setProperty('--phone-surface-variant', found.surfaceVariant);
   phoneShell.style.setProperty('--phone-text', found.text);
   phoneShell.style.setProperty('--phone-border', found.border);
   phoneShell.style.setProperty('--phone-glass-bg', found.glassBg);
   phoneShell.style.setProperty('--phone-glass-border', found.glassBorder);
-
-  document.getElementById('phone-album-badge').textContent = found.badgeText;
 
   document.querySelectorAll('.course-block').forEach((block) => {
     const slot = Number(block.getAttribute('data-slot')) || 0;
@@ -609,15 +865,10 @@ function applyTheme(themeId, syncParticles = false) {
   });
 
   updateLyricBar();
-  buildPreviewThemeButtons();
+  buildPreviewThemeDots();
 
   if (syncParticles) {
-    heroField.setColors(found.spectrum);
-    workshopField.setColors(found.spectrum);
-    darkField.setColors(found.spectrum);
-    document.querySelectorAll('.spectrum-chip').forEach((chip) => {
-      chip.classList.toggle('is-active', chip.getAttribute('data-spectrum') === found.id);
-    });
+    lightFields.forEach((f) => f.setColors(found.spectrum));
   }
 }
 
@@ -634,58 +885,37 @@ document.getElementById('lyric-bar').addEventListener('click', () => {
 
 document.querySelectorAll('[data-ui-mode]').forEach((btn) => {
   btn.addEventListener('click', () => {
-    currentUiStyle = btn.getAttribute('data-ui-mode');
-    phoneShell.setAttribute('data-ui-style', currentUiStyle);
-    document.getElementById('phone-material-pill').textContent = currentUiStyle === 'glass' ? 'LIQUID GLASS' : 'CLASSIC PURE';
+    phoneShell.setAttribute('data-ui-style', btn.getAttribute('data-ui-mode'));
     document.querySelectorAll('[data-ui-mode]').forEach((b) => b.classList.toggle('is-active', b === btn));
   });
 });
 
-// 28 点阵通知卡「已到教室」交互演示
+let notifDismissed = false;
 const arrivedBtn = document.getElementById('arrived-btn');
 const dotNotifCard = document.getElementById('dot-notif-card');
-let notifDismissed = false;
 arrivedBtn.addEventListener('click', () => {
   notifDismissed = !notifDismissed;
   if (notifDismissed) {
     dotNotifCard.classList.add('is-dismissed');
-    document.getElementById('notif-title').textContent = '已收起提醒 · 祝上课愉快';
-    document.getElementById('notif-sub').textContent = '状态栏胶囊已静默 · 下节课前 15 分钟自动唤醒';
-    arrivedBtn.textContent = '恢复预览';
+    document.getElementById('notif-title').textContent = '已收起提醒';
+    document.getElementById('notif-sub').textContent = '下节课前 15 分钟自动唤醒';
+    arrivedBtn.textContent = '恢复';
     renderDotMatrix(28);
   } else {
     dotNotifCard.classList.remove('is-dismissed');
-    document.getElementById('notif-title').textContent = '正在进行 · 物理实验长课';
-    document.getElementById('notif-sub').textContent = '09:50–12:15 · 实验楼 401 · 进度 64%';
+    document.getElementById('notif-title').textContent = '物理实验长课';
+    document.getElementById('notif-sub').textContent = '09:50–12:15 · 实验楼 401';
     arrivedBtn.textContent = '已到教室';
     renderDotMatrix(18);
   }
 });
 
-// Hero 光谱快捷切换条
-document.querySelectorAll('.spectrum-chip').forEach((chip) => {
-  chip.addEventListener('click', () => {
-    const key = chip.getAttribute('data-spectrum');
-    document.querySelectorAll('.spectrum-chip').forEach((c) => c.classList.toggle('is-active', c === chip));
-    if (key === 'antigravity') {
-      heroField.setColors(ANTIGRAVITY_SPECTRUM);
-      workshopField.setColors(ANTIGRAVITY_SPECTRUM);
-      darkField.setColors(DARK_CTA_SPECTRUM);
-    } else {
-      applyTheme(key, true);
-    }
-  });
-});
-
-// 预览剧场悬浮胶囊光标跟随
 const cursorPill = document.getElementById('cursor-pill');
 theaterFrame.addEventListener('pointermove', (e) => {
   if (reducedMotionQuery.matches) return;
   const rect = theaterFrame.getBoundingClientRect();
-  const x = e.clientX - rect.left + 16;
-  const y = e.clientY - rect.top + 16;
   cursorPill.style.opacity = '1';
-  cursorPill.style.transform = `translate3d(${x}px, ${y}px, 0)`;
+  cursorPill.style.transform = `translate3d(${e.clientX - rect.left + 16}px, ${e.clientY - rect.top + 16}px, 0)`;
 }, { passive: true });
 theaterFrame.addEventListener('pointerleave', () => {
   cursorPill.style.opacity = '0';
@@ -695,32 +925,7 @@ renderDotMatrix(18);
 applyTheme('ZTMY', false);
 
 // ============================================================
-// 5. 高校教务系统标签墙筛选
-// ============================================================
-const portalWall = document.getElementById('portal-wall');
-function renderPortals(filter) {
-  portalWall.innerHTML = '';
-  const items = filter === 'all'
-    ? UNIVERSITY_PORTALS
-    : UNIVERSITY_PORTALS.filter((p) => p.category === filter);
-  items.forEach((p) => {
-    const chip = document.createElement('span');
-    chip.className = 'portal-chip';
-    chip.innerHTML = `<span>${p.school}</span><em>${p.system}</em>`;
-    portalWall.appendChild(chip);
-  });
-}
-
-document.querySelectorAll('.portal-filter-btn').forEach((btn) => {
-  btn.addEventListener('click', () => {
-    document.querySelectorAll('.portal-filter-btn').forEach((b) => b.classList.toggle('is-active', b === btn));
-    renderPortals(btn.getAttribute('data-system'));
-  });
-});
-renderPortals('all');
-
-// ============================================================
-// 6. 唱片柜 Carousel 轮播控制（严格遵循 modern-web-guidance carousel）
+// 6. 极简黑胶画廊 Carousel（遵循 modern-web-guidance）
 // ============================================================
 const track = document.getElementById('vinyl-track');
 const markersNav = document.getElementById('carousel-markers');
@@ -728,140 +933,88 @@ const statusRegion = document.getElementById('carousel-status');
 const prevBtn = document.getElementById('carousel-prev');
 const nextBtn = document.getElementById('carousel-next');
 
-let visibleSlides = [];
 let settledIndex = 0;
 let pendingIndex = null;
 
-function buildVinylSlides() {
+function buildVinylGallery() {
   track.innerHTML = '';
-  ARTIST_THEMES.forEach((theme, idx) => {
+  markersNav.innerHTML = '';
+
+  ARTIST_THEMES.forEach((theme, i) => {
     const slide = document.createElement('article');
     slide.className = 'vinyl-slide';
     slide.setAttribute('role', 'group');
     slide.setAttribute('aria-roledescription', 'slide');
-    slide.setAttribute('data-genre', theme.genre);
-    slide.setAttribute('data-theme-id', theme.id);
-    slide.setAttribute('aria-label', `第 ${idx + 1} 张，共 ${ARTIST_THEMES.length} 张`);
+    slide.setAttribute('aria-label', `第 ${i + 1} 张，共 ${ARTIST_THEMES.length} 张`);
 
-    const lyric = theme.lyrics[0];
-    const sleeveTextColor = theme.isDark ? theme.text : '#211A14';
-    slide.innerHTML = `
-      <div>
-        <div class="vinyl-artwork">
-          <div class="vinyl-sleeve" style="background: linear-gradient(145deg, ${theme.surface}, ${theme.surfaceVariant}); color: ${sleeveTextColor}; border: 1px solid ${theme.border};">
-            <span style="font-size: 11px; font-family: var(--font-mono); color: ${theme.primary}; font-weight: 700;">${theme.badgeText}</span>
-            <div>
-              <div style="font-size: 17px; font-weight: 700; line-height: 1.2;">${theme.displayName}</div>
-              <div style="font-size: 12px; opacity: 0.78; margin-top: 2px;">${theme.artistName}</div>
-            </div>
-          </div>
-          <div class="vinyl-disc-peek" style="--disc-accent: ${theme.primary};" aria-hidden="true"></div>
-        </div>
-        <div class="vinyl-swatches" style="margin-top: 16px;">
-          <span class="swatch-dot" style="background: ${theme.bg};" title="背景色"></span>
-          <span class="swatch-dot" style="background: ${theme.primary};" title="主色调"></span>
-          <span class="swatch-dot" style="background: ${theme.secondary};" title="副色调"></span>
-          <span class="swatch-dot" style="background: ${theme.tertiary};" title="点缀色"></span>
-          <span style="font-size: 12px; color: var(--ink-subtle); margin-left: auto;">${theme.genreLabel} · ${theme.isDark ? '暗夜' : '浅色'}</span>
-        </div>
-        <p class="vinyl-quote" style="margin-top: 12px;">「${lyric.line}」</p>
+    const btn = document.createElement('button');
+    btn.type = 'button';
+    btn.className = 'vinyl-cover-btn';
+    btn.innerHTML = `
+      <div class="vinyl-cover-box" style="background: linear-gradient(145deg, ${theme.surface}, ${theme.surfaceVariant}); color: ${theme.text};">
+        <span style="font-size: 11px; font-family: var(--font-mono); color: ${theme.primary};">${theme.badgeText}</span>
+        <div class="vinyl-cover-disc" style="--disc-accent: ${theme.primary};" aria-hidden="true"></div>
       </div>
       <div>
-        <button type="button" class="pill-btn pill-btn--secondary pill-btn--compact apply-album-btn" data-theme-id="${theme.id}" style="width: 100%;">
-          应用至预览台与粒子星环
-        </button>
+        <div class="vinyl-title">${theme.displayName}</div>
+        <div class="vinyl-sub">${theme.artistName} · ${theme.genreLabel}</div>
       </div>
     `;
-    track.appendChild(slide);
-  });
-
-  track.querySelectorAll('.apply-album-btn').forEach((btn) => {
     btn.addEventListener('click', () => {
-      applyTheme(btn.getAttribute('data-theme-id'), true);
+      applyTheme(theme.id, true);
       document.getElementById('preview').scrollIntoView({
         behavior: reducedMotionQuery.matches ? 'auto' : 'smooth',
         block: 'start'
       });
     });
-  });
+    slide.appendChild(btn);
+    track.appendChild(slide);
 
-  syncVisibleSlides();
-}
-
-function syncVisibleSlides() {
-  visibleSlides = Array.from(track.children).filter((el) => !el.hidden);
-  visibleSlides.forEach((slide, i) => {
-    slide.setAttribute('aria-label', `第 ${i + 1} 张，共 ${visibleSlides.length} 张`);
-  });
-
-  markersNav.innerHTML = '';
-  visibleSlides.forEach((slide, i) => {
     const markerBtn = document.createElement('button');
     markerBtn.type = 'button';
     markerBtn.className = 'carousel-marker-btn';
-    markerBtn.setAttribute('aria-label', `跳转到第 ${i + 1} 张专辑主题`);
+    markerBtn.setAttribute('aria-label', `跳转到第 ${i + 1} 张专辑`);
     if (i === 0) markerBtn.setAttribute('aria-current', 'true');
     markerBtn.innerHTML = '<span class="marker-pill"></span>';
     markerBtn.addEventListener('click', () => scrollToSlide(i));
     markersNav.appendChild(markerBtn);
   });
-
-  settledIndex = 0;
-  pendingIndex = null;
-  track.scrollTo({ left: 0, behavior: 'auto' });
-  updateMarkers(0);
 }
 
 function updateMarkers(activeIdx) {
-  const buttons = markersNav.querySelectorAll('.carousel-marker-btn');
-  buttons.forEach((b, i) => {
-    if (i === activeIdx) {
-      b.setAttribute('aria-current', 'true');
-    } else {
-      b.removeAttribute('aria-current');
-    }
+  markersNav.querySelectorAll('.carousel-marker-btn').forEach((b, i) => {
+    if (i === activeIdx) b.setAttribute('aria-current', 'true');
+    else b.removeAttribute('aria-current');
   });
 }
 
 function nearestSlideIndex() {
-  if (!visibleSlides.length) return 0;
+  const slides = Array.from(track.children);
   const trackCenter = track.scrollLeft + track.clientWidth / 2;
-  let bestIdx = 0;
-  let bestDist = Infinity;
-  visibleSlides.forEach((slide, i) => {
-    const slideCenter = slide.offsetLeft + slide.offsetWidth / 2;
-    const d = Math.abs(slideCenter - trackCenter);
-    if (d < bestDist) {
-      bestDist = d;
-      bestIdx = i;
-    }
+  let best = 0;
+  let minD = Infinity;
+  slides.forEach((s, i) => {
+    const d = Math.abs((s.offsetLeft + s.offsetWidth / 2) - trackCenter);
+    if (d < minD) { minD = d; best = i; }
   });
-  return bestIdx;
+  return best;
 }
 
 function scrollToSlide(targetIdx) {
-  if (!visibleSlides.length) return;
-  const wrapped = (targetIdx + visibleSlides.length) % visibleSlides.length;
+  const slides = Array.from(track.children);
+  if (!slides.length) return;
+  const wrapped = (targetIdx + slides.length) % slides.length;
   pendingIndex = wrapped;
   updateMarkers(wrapped);
-
-  const slide = visibleSlides[wrapped];
-  const targetLeft = slide.offsetLeft - (track.clientWidth - slide.offsetWidth) / 2;
+  const s = slides[wrapped];
   track.scrollTo({
-    left: Math.max(0, targetLeft),
+    left: Math.max(0, s.offsetLeft - (track.clientWidth - s.offsetWidth) / 2),
     behavior: reducedMotionQuery.matches ? 'auto' : 'smooth'
   });
 }
 
-prevBtn.addEventListener('click', () => {
-  const base = pendingIndex !== null ? pendingIndex : nearestSlideIndex();
-  scrollToSlide(base - 1);
-});
-
-nextBtn.addEventListener('click', () => {
-  const base = pendingIndex !== null ? pendingIndex : nearestSlideIndex();
-  scrollToSlide(base + 1);
-});
+prevBtn.addEventListener('click', () => scrollToSlide((pendingIndex ?? nearestSlideIndex()) - 1));
+nextBtn.addEventListener('click', () => scrollToSlide((pendingIndex ?? nearestSlideIndex()) + 1));
 
 let rAFScheduled = false;
 track.addEventListener('scroll', () => {
@@ -869,8 +1022,7 @@ track.addEventListener('scroll', () => {
   rAFScheduled = true;
   requestAnimationFrame(() => {
     rAFScheduled = false;
-    const idx = nearestSlideIndex();
-    updateMarkers(idx);
+    updateMarkers(nearestSlideIndex());
   });
 }, { passive: true });
 
@@ -878,39 +1030,75 @@ function handleScrollSettled() {
   const idx = nearestSlideIndex();
   pendingIndex = null;
   updateMarkers(idx);
-  if (idx !== settledIndex && visibleSlides[idx]) {
+  if (idx !== settledIndex) {
     settledIndex = idx;
-    const title = visibleSlides[idx].querySelector('div[style*="font-weight: 700"]')?.textContent || '';
-    statusRegion.textContent = `当前展示第 ${idx + 1} 张，共 ${visibleSlides.length} 张：${title}`;
+    const title = track.children[idx]?.querySelector('.vinyl-title')?.textContent || '';
+    statusRegion.textContent = `当前第 ${idx + 1} 张，共 ${ARTIST_THEMES.length} 张：${title}`;
   }
 }
 
 if ('onscrollend' in window) {
   track.addEventListener('scrollend', handleScrollSettled);
 } else {
-  let scrollDebounce = 0;
+  let tId = 0;
   track.addEventListener('scroll', () => {
-    clearTimeout(scrollDebounce);
-    scrollDebounce = setTimeout(handleScrollSettled, 140);
+    clearTimeout(tId);
+    tId = setTimeout(handleScrollSettled, 140);
   }, { passive: true });
 }
 
-document.querySelectorAll('.genre-btn').forEach((btn) => {
-  btn.addEventListener('click', () => {
-    const genre = btn.getAttribute('data-genre');
-    document.querySelectorAll('.genre-btn').forEach((b) => b.classList.toggle('is-active', b === btn));
-    Array.from(track.children).forEach((slide) => {
-      slide.hidden = genre !== 'ALL' && slide.getAttribute('data-genre') !== genre;
-    });
-    syncVisibleSlides();
-  });
+buildVinylGallery();
+
+// ============================================================
+// 7. 弹窗控制（公告条、移动抽屉、17 所高校清单、OAuth 构建工坊）
+// ============================================================
+document.getElementById('announcement-close').addEventListener('click', () => {
+  document.getElementById('announcement-bar').hidden = true;
 });
 
-buildVinylSlides();
+const mobileDrawer = document.getElementById('mobile-drawer');
+const mobileMenuBtn = document.getElementById('mobile-menu-btn');
+mobileMenuBtn.addEventListener('click', () => {
+  mobileDrawer.showModal();
+  mobileMenuBtn.setAttribute('aria-expanded', 'true');
+});
+document.getElementById('mobile-drawer-close').addEventListener('click', () => mobileDrawer.close());
+mobileDrawer.addEventListener('close', () => mobileMenuBtn.setAttribute('aria-expanded', 'false'));
+mobileDrawer.addEventListener('click', (e) => {
+  if (e.target === mobileDrawer || e.target.tagName === 'A') mobileDrawer.close();
+});
 
-// ============================================================
-// 7. OAuth-Callback 同款代码工坊 Tab 与绿色复制确认反馈
-// ============================================================
+const portalsDialog = document.getElementById('portals-dialog');
+const portalsList = document.getElementById('portals-list');
+UNIVERSITY_PORTALS.forEach(([school, sys]) => {
+  const row = document.createElement('div');
+  row.className = 'portal-item';
+  row.innerHTML = `<span>${school}</span><em>${sys}</em>`;
+  portalsList.appendChild(row);
+});
+document.getElementById('open-portals-btn').addEventListener('click', () => portalsDialog.showModal());
+document.getElementById('portals-dialog-close').addEventListener('click', () => portalsDialog.close());
+portalsDialog.addEventListener('click', (e) => { if (e.target === portalsDialog) portalsDialog.close(); });
+
+const workshopDialog = document.getElementById('workshop-dialog');
+const openWorkshopModal = () => {
+  workshopDialog.showModal();
+  dialogField.isVisible = true;
+  dialogField.resize();
+  dialogField.seedPoints();
+  dialogField.stepSimulation(dialogField.time);
+  dialogField.draw();
+};
+document.getElementById('open-workshop-btn').addEventListener('click', openWorkshopModal);
+document.getElementById('dark-open-workshop').addEventListener('click', openWorkshopModal);
+document.getElementById('mobile-open-workshop').addEventListener('click', () => {
+  mobileDrawer.close();
+  openWorkshopModal();
+});
+document.getElementById('workshop-dialog-close').addEventListener('click', () => workshopDialog.close());
+workshopDialog.addEventListener('close', () => { dialogField.isVisible = false; });
+workshopDialog.addEventListener('click', (e) => { if (e.target === workshopDialog) workshopDialog.close(); });
+
 const workshopCode = document.getElementById('workshop-code');
 const workshopCopyBtn = document.getElementById('workshop-copy-btn');
 let activeTabKey = 'build';
@@ -923,7 +1111,6 @@ document.querySelectorAll('.workshop-tab').forEach((tabBtn) => {
     workshopCode.textContent = data.code;
     workshopCopyBtn.textContent = data.btnText;
     workshopCopyBtn.classList.remove('copied');
-
     document.querySelectorAll('.workshop-tab').forEach((b) => {
       const active = b === tabBtn;
       b.classList.toggle('is-active', active);
