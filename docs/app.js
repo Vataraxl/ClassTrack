@@ -726,35 +726,54 @@ function sampleMorphTargets(shapeType, aspect) {
   ctx.fillStyle = '#000000';
   ctx.lineCap = 'round';
   ctx.lineJoin = 'round';
+  const isCompact = aspect < 0.95;
 
   if (shapeType === 'vinyl') {
     // ClassTrack 黑胶唱盘 + 双重声槽弧线 + 右侧唱臂唱头 + 左上跃动八分音符 ♪
-    // 中心安全留白区 x∈[115,385], y∈[160,342] 完全避开，保证文案与按钮清晰可读
+    // 中心安全留白区避开文案与按钮；窄屏启用紧凑外扩几何避免擦碰标题
     const cx = 232;
     const cy = 250;
 
     // 1. 黑胶外盘环
     ctx.lineWidth = 17;
     ctx.beginPath();
-    ctx.arc(cx, cy, 194, 0, Math.PI * 2);
+    ctx.arc(cx, cy, isCompact ? 196 : 194, 0, Math.PI * 2);
     ctx.stroke();
 
-    // 2. 上下双重声槽弧线（精确位于安全区上方 y<150 与下方 y>350）
-    ctx.lineWidth = 9;
-    ctx.beginPath();
-    ctx.arc(cx, cy, 156, -Math.PI * 0.76, -Math.PI * 0.24);
-    ctx.stroke();
-    ctx.beginPath();
-    ctx.arc(cx, cy, 156, Math.PI * 0.24, Math.PI * 0.76);
-    ctx.stroke();
+    // 2. 上下双重声槽弧线
+    if (isCompact) {
+      ctx.lineWidth = 9;
+      ctx.beginPath();
+      ctx.arc(cx, cy, 166, -Math.PI * 0.70, -Math.PI * 0.30);
+      ctx.stroke();
+      ctx.beginPath();
+      ctx.arc(cx, cy, 166, Math.PI * 0.30, Math.PI * 0.70);
+      ctx.stroke();
 
-    ctx.lineWidth = 7;
-    ctx.beginPath();
-    ctx.arc(cx, cy, 126, -Math.PI * 0.69, -Math.PI * 0.31);
-    ctx.stroke();
-    ctx.beginPath();
-    ctx.arc(cx, cy, 126, Math.PI * 0.31, Math.PI * 0.69);
-    ctx.stroke();
+      ctx.lineWidth = 7;
+      ctx.beginPath();
+      ctx.arc(cx, cy, 144, -Math.PI * 0.62, -Math.PI * 0.38);
+      ctx.stroke();
+      ctx.beginPath();
+      ctx.arc(cx, cy, 144, Math.PI * 0.38, Math.PI * 0.62);
+      ctx.stroke();
+    } else {
+      ctx.lineWidth = 9;
+      ctx.beginPath();
+      ctx.arc(cx, cy, 156, -Math.PI * 0.76, -Math.PI * 0.24);
+      ctx.stroke();
+      ctx.beginPath();
+      ctx.arc(cx, cy, 156, Math.PI * 0.24, Math.PI * 0.76);
+      ctx.stroke();
+
+      ctx.lineWidth = 7;
+      ctx.beginPath();
+      ctx.arc(cx, cy, 126, -Math.PI * 0.69, -Math.PI * 0.31);
+      ctx.stroke();
+      ctx.beginPath();
+      ctx.arc(cx, cy, 126, Math.PI * 0.31, Math.PI * 0.69);
+      ctx.stroke();
+    }
 
     // 3. 右侧唱机枢轴底座 + 折线唱臂 + 倾斜唱头
     ctx.lineWidth = 10;
@@ -796,68 +815,101 @@ function sampleMorphTargets(shapeType, aspect) {
     ctx.stroke();
   } else {
     // ClassTrack 监听头戴式耳机 + 顶部课节状态胶囊 + 底部七柱课程节律频谱
-    // 中心安全留白区 x∈[115,385], y∈[160,342] 零遮挡
     const cx = 250;
-    const cy = 240;
+    const cy = isCompact ? 232 : 240;
 
     // 1. 头梁弧线
     ctx.lineWidth = 18;
     ctx.beginPath();
-    ctx.arc(cx, cy, 192, -Math.PI * 0.93, -Math.PI * 0.07);
+    ctx.arc(cx, cy, isCompact ? 196 : 192, -Math.PI * 0.93, -Math.PI * 0.07);
     ctx.stroke();
 
     // 头梁内衬减压垫细弧
     ctx.lineWidth = 8;
     ctx.beginPath();
-    ctx.arc(cx, cy, 168, -Math.PI * 0.72, -Math.PI * 0.28);
+    ctx.arc(cx, cy, isCompact ? 172 : 168, -Math.PI * 0.72, -Math.PI * 0.28);
     ctx.stroke();
 
-    // 2. 顶部实时课节状态胶囊（位于头梁下方、文案上方 y∈[106, 134]）
+    // 2. 顶部实时课节状态胶囊
+    const capY = isCompact ? 82 : 106;
+    const capCy = capY + 13;
     ctx.lineWidth = 9;
-    drawRoundedRectPath(ctx, 182, 106, 136, 28, 14);
+    drawRoundedRectPath(ctx, 182, capY, 136, isCompact ? 26 : 28, 13);
     ctx.stroke();
     ctx.beginPath();
-    ctx.arc(202, 120, 6.5, 0, Math.PI * 2);
+    ctx.arc(202, capCy, 6.5, 0, Math.PI * 2);
     ctx.fill();
     ctx.lineWidth = 6.5;
     ctx.beginPath();
-    ctx.moveTo(220, 120);
-    ctx.lineTo(298, 120);
+    ctx.moveTo(220, capCy);
+    ctx.lineTo(298, capCy);
     ctx.stroke();
 
     // 3. 左右全包耳式耳罩 + 衔接臂 + 外侧声波弧
-    ctx.lineWidth = 14;
-    ctx.beginPath();
-    ctx.moveTo(62, 198);
-    ctx.lineTo(66, 212);
-    ctx.moveTo(438, 198);
-    ctx.lineTo(434, 212);
-    ctx.stroke();
+    if (isCompact) {
+      ctx.lineWidth = 14;
+      ctx.beginPath();
+      ctx.moveTo(58, 192);
+      ctx.lineTo(62, 206);
+      ctx.moveTo(442, 192);
+      ctx.lineTo(438, 206);
+      ctx.stroke();
 
-    drawRoundedRectPath(ctx, 48, 206, 36, 128, 18);
-    ctx.fill();
-    drawRoundedRectPath(ctx, 416, 206, 36, 128, 18);
-    ctx.fill();
+      drawRoundedRectPath(ctx, 40, 202, 34, 124, 17);
+      ctx.fill();
+      drawRoundedRectPath(ctx, 426, 202, 34, 124, 17);
+      ctx.fill();
 
-    // 左右外侧声波弧
-    ctx.lineWidth = 9;
-    ctx.beginPath();
-    ctx.arc(70, 270, 50, Math.PI * 0.79, Math.PI * 1.21);
-    ctx.stroke();
-    ctx.beginPath();
-    ctx.arc(430, 270, 50, -Math.PI * 0.21, Math.PI * 0.21);
-    ctx.stroke();
+      ctx.lineWidth = 9;
+      ctx.beginPath();
+      ctx.arc(64, 264, 46, Math.PI * 0.79, Math.PI * 1.21);
+      ctx.stroke();
+      ctx.beginPath();
+      ctx.arc(436, 264, 46, -Math.PI * 0.21, Math.PI * 0.21);
+      ctx.stroke();
+    } else {
+      ctx.lineWidth = 14;
+      ctx.beginPath();
+      ctx.moveTo(62, 198);
+      ctx.lineTo(66, 212);
+      ctx.moveTo(438, 198);
+      ctx.lineTo(434, 212);
+      ctx.stroke();
 
-    // 4. 底部 7 柱课程频谱柱（y >= 370，位于按钮下方）
-    const eqBars = [
-      [148, 412, 448],
-      [182, 388, 452],
-      [216, 372, 456],
-      [250, 396, 446],
-      [284, 370, 456],
-      [318, 388, 452],
-      [352, 412, 448]
-    ];
+      drawRoundedRectPath(ctx, 48, 206, 36, 128, 18);
+      ctx.fill();
+      drawRoundedRectPath(ctx, 416, 206, 36, 128, 18);
+      ctx.fill();
+
+      ctx.lineWidth = 9;
+      ctx.beginPath();
+      ctx.arc(70, 270, 50, Math.PI * 0.79, Math.PI * 1.21);
+      ctx.stroke();
+      ctx.beginPath();
+      ctx.arc(430, 270, 50, -Math.PI * 0.21, Math.PI * 0.21);
+      ctx.stroke();
+    }
+
+    // 4. 底部 7 柱课程频谱柱
+    const eqBars = isCompact
+      ? [
+          [148, 424, 456],
+          [182, 402, 460],
+          [216, 390, 464],
+          [250, 410, 454],
+          [284, 388, 464],
+          [318, 402, 460],
+          [352, 424, 456]
+        ]
+      : [
+          [148, 412, 448],
+          [182, 388, 452],
+          [216, 372, 456],
+          [250, 396, 446],
+          [284, 370, 456],
+          [318, 388, 452],
+          [352, 412, 448]
+        ];
     ctx.lineWidth = 13;
     for (const [bx, byTop, byBottom] of eqBars) {
       ctx.beginPath();
@@ -869,7 +921,7 @@ function sampleMorphTargets(shapeType, aspect) {
 
   const img = ctx.getImageData(0, 0, size, size).data;
   const targets = [];
-  const span = Math.min(aspect * 0.92, 0.90);
+  const span = isCompact ? Math.min(aspect * 0.96, 0.86) : Math.min(aspect * 0.92, 0.90);
   const halfSpanX = span;
   const halfSpanY = span;
   const step = 2;
@@ -968,8 +1020,8 @@ class MorphingParticleField {
 
   seedPoints() {
     const isNarrow = this.width < 520;
-    const cols = isNarrow ? 34 : 50;
-    const rows = isNarrow ? 36 : 48;
+    const cols = isNarrow ? 40 : 50;
+    const rows = isNarrow ? 42 : 48;
     this.count = cols * rows;
 
     const targets = sampleMorphTargets(this.shapeType, this.aspect);
@@ -1006,8 +1058,9 @@ class MorphingParticleField {
         this.seeds[idx * 2] = f1;
         this.seeds[idx * 2 + 1] = f2;
 
-        // 55% 粒子直接锁入目标轮廓，其余 45% 在悬停时淡出让白底极度干净
-        const active = targets.length > 0 && ((idx * 7) % 20 < 11);
+        // 窄屏按 65%（13/20）、桌面按 55%（11/20）粒子锁入目标轮廓，兼顾清晰度与干净背景
+        const morphShare = isNarrow ? ((idx * 7) % 20 < 13) : ((idx * 7) % 20 < 11);
+        const active = targets.length > 0 && morphShare;
         this.isMorpher[idx] = active ? 1 : 0;
         const tgt = targets[idx % Math.max(1, targets.length)] || [rx, ry];
         this.targets[idx * 2] = tgt[0];
@@ -1037,14 +1090,14 @@ class MorphingParticleField {
     }
   }
 
-  step(dt) {
+  step(dt, morphDt = dt) {
     const t = this.time;
     const goal = this.isHovering ? 1 : 0;
     const speed = 1.9; // ~0.52s 完成聚拢或散开
     if (this.hoverT < goal) {
-      this.hoverT = Math.min(1, this.hoverT + dt * speed);
+      this.hoverT = Math.min(1, this.hoverT + morphDt * speed);
     } else if (this.hoverT > goal) {
-      this.hoverT = Math.max(0, this.hoverT - dt * speed);
+      this.hoverT = Math.max(0, this.hoverT - morphDt * speed);
     }
 
     for (let i = 0; i < this.count; i++) {
@@ -1119,11 +1172,13 @@ class MorphingParticleField {
     let last = performance.now();
     const tick = (now) => {
       if (!this.running) return;
-      const dt = Math.min(0.05, (now - last) / 1000);
+      const elapsed = (now - last) / 1000;
+      const dt = Math.min(0.05, elapsed);
+      const morphDt = Math.min(0.25, elapsed);
       last = now;
       if (this.isVisible) {
         this.time += dt;
-        this.step(dt);
+        this.step(dt, morphDt);
         this.draw();
       }
       this.rafId = requestAnimationFrame(tick);
@@ -1229,13 +1284,38 @@ bindPointer(document.getElementById('workshop-dialog-stage'), dialogField);
 
 const bindMorphCol = (selector, morphField) => {
   const col = document.querySelector(selector);
-  col.addEventListener('pointerenter', () => morphField.setHover(true));
-  col.addEventListener('pointerleave', () => morphField.setHover(false));
+  const coarseQuery = window.matchMedia('(pointer: coarse)');
+  let manualToggled = false;
+
+  col.addEventListener('pointerenter', (e) => {
+    if (e.pointerType !== 'touch' && !coarseQuery.matches) {
+      morphField.setHover(true);
+    }
+  });
+  col.addEventListener('pointerleave', (e) => {
+    if (e.pointerType !== 'touch' && !coarseQuery.matches) {
+      morphField.setHover(false);
+    }
+  });
   col.addEventListener('click', (e) => {
-    if (window.matchMedia('(pointer: coarse)').matches && !e.target.closest('a, button')) {
+    if (coarseQuery.matches && !e.target.closest('a, button')) {
+      manualToggled = true;
       morphField.setHover(!morphField.isHovering);
     }
   });
+
+  const colObserver = new IntersectionObserver((entries) => {
+    if (!coarseQuery.matches) return;
+    for (const entry of entries) {
+      if (entry.intersectionRatio >= 0.52 && !manualToggled) {
+        morphField.setHover(true);
+      } else if (entry.intersectionRatio < 0.12) {
+        manualToggled = false;
+        morphField.setHover(false);
+      }
+    }
+  }, { threshold: [0.12, 0.52] });
+  colObserver.observe(col);
 };
 bindMorphCol('[data-morph-shape="vinyl"]', morphLeftField);
 bindMorphCol('[data-morph-shape="headphones"]', morphRightField);
@@ -1321,10 +1401,11 @@ let bouncerLastTime = performance.now();
 
 function applyBouncerWave(phasePx) {
   const wavelength = Math.max(960, window.innerWidth);
+  const amp = window.innerWidth < 640 ? 22 : 35;
   for (let i = 0; i < bouncerDiscs.length; i++) {
     const cx = bouncerOffsets[i] ?? i * 106;
     const angle = ((cx + phasePx) / wavelength) * Math.PI * 2;
-    const y = Math.sin(angle) * 35;
+    const y = Math.sin(angle) * amp;
     bouncerDiscs[i].style.transform = `translate3d(0, ${y.toFixed(2)}px, 0)`;
   }
 }
@@ -1361,13 +1442,14 @@ const bouncerObserver = new IntersectionObserver((entries) => {
 }, { rootMargin: '100px 0px', threshold: 0 });
 bouncerObserver.observe(bouncerSection);
 
-// 滚动水平视差（x: +125px -> -125px，总行程 250px）
+// 滚动水平视差（相对视口中心对称滑动，桌面 250px、手机 150px 行程）
 const updateBouncerScrub = () => {
   const rect = bouncerSection.getBoundingClientRect();
   const vh = window.innerHeight || 900;
   const progress = Math.max(0, Math.min(1, (vh - rect.top) / (vh + rect.height)));
-  const shiftX = 125 - progress * 250;
-  bouncerStrip.style.transform = `translate3d(${shiftX.toFixed(1)}px, 0, 0)`;
+  const maxShift = window.innerWidth < 640 ? 75 : 125;
+  const shiftX = maxShift - progress * (maxShift * 2);
+  bouncerStrip.style.transform = `translate3d(calc(-50% + ${shiftX.toFixed(1)}px), 0, 0)`;
 };
 updateBouncerScrub();
 window.addEventListener('scroll', updateBouncerScrub, { passive: true });
@@ -1515,7 +1597,7 @@ arrivedBtn.addEventListener('click', () => {
 
 const cursorPill = document.getElementById('cursor-pill');
 theaterFrame.addEventListener('pointermove', (e) => {
-  if (reducedMotionQuery.matches) return;
+  if (e.pointerType === 'touch' || reducedMotionQuery.matches) return;
   const rect = theaterFrame.getBoundingClientRect();
   cursorPill.style.opacity = '1';
   cursorPill.style.transform = `translate3d(${e.clientX - rect.left + 16}px, ${e.clientY - rect.top + 16}px, 0)`;
